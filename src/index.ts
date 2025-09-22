@@ -1,11 +1,15 @@
+// src/index.ts
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
+import bcrypt from 'bcryptjs';
 import { connectDatabase } from './config/database';
 import userRoutes from './routes/user.routes';
+import stationRoutes from './routes/chargingstation.routes';
 import { specs } from './config/swagger';
+import { User } from './models/user.model';
 
 // Load env
 dotenv.config();
@@ -63,6 +67,57 @@ app.use(
 
 // --- Routes ---
 app.use('/users', userRoutes);
+// ⚡ Mount charging stations router (router dùng path tương đối '/')
+app.use('/stations', stationRoutes);
+
+/**
+ * Seed default admin & staff if not exists
+ * - Username/Email có thể override qua env
+ * - Password mặc định: 12345678 (override qua DEFAULT_SEED_PASSWORD)
+ */
+async function seedDefaultUsers() {
+  try {
+    const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
+    const plain = process.env.DEFAULT_SEED_PASSWORD || '12345678';
+    const hashed = await bcrypt.hash(plain, saltRounds);
+
+    const candidates = [
+      {
+        username: process.env.DEFAULT_ADMIN_USERNAME || 'admin',
+        email: (process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com').toLowerCase(),
+        role: 'admin' as const,
+        fullName: 'Default Admin',
+      },
+      {
+        username: process.env.DEFAULT_STAFF_USERNAME || 'staff',
+        email: (process.env.DEFAULT_STAFF_EMAIL || 'staff@example.com').toLowerCase(),
+        role: 'staff' as const,
+        fullName: 'Default Staff',
+      },
+    ];
+
+    for (const c of candidates) {
+      const existing = await User.findOne({
+        $or: [{ username: c.username }, { email: c.email }],
+      });
+
+      if (!existing) {
+        await User.create({
+          username: c.username,
+          email: c.email,
+          password: hashed,
+          role: c.role,
+          profile: { fullName: c.fullName },
+        });
+        console.log(`[seed] Created ${c.role} user (${c.username} / ${c.email})`);
+      } else {
+        console.log(`[seed] ${c.role} exists (${existing.username}) — skip`);
+      }
+    }
+  } catch (err) {
+    console.error('[seed] Failed to seed default users:', err);
+  }
+}
 
 /**
  * @swagger
@@ -74,20 +129,6 @@ app.use('/users', userRoutes);
  *     responses:
  *       200:
  *         description: Server đang hoạt động bình thường
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                 message:
- *                   type: string
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *                 uptime:
- *                   type: number
  */
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -123,6 +164,13 @@ app.get('/', (_req: Request, res: Response) => {
         updateProfile: 'PUT /users/profile (Protected)',
         getAll: 'GET /users/get-all (Protected)',
       },
+      stations: {
+        create: 'POST /stations (Protected: admin, staff)',
+        list: 'GET /stations (Protected: all roles)',
+        getById: 'GET /stations/:id (Protected: all roles)',
+        update: 'PUT /stations/:id (Protected: admin, staff)',
+        delete: 'DELETE /stations/:id (Protected: admin)',
+      },
     },
   });
 });
@@ -149,6 +197,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
+    await seedDefaultUsers(); // ✅ seed mặc định
     app.listen(port, () => {
       console.log(`Server is running on port ${port}`);
       console.log(`Health check: http://localhost:${port}/health`);
