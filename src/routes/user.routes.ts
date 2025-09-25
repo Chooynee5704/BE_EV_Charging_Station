@@ -8,6 +8,12 @@ import {
   changePasswordController,
 } from '../controllers/user.controller';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.middleware';
+import {
+  forgotPasswordController,
+  resetPasswordController,
+  verifyResetTokenController,
+  verifyResetOtpController,
+} from '../controllers/passwordReset.controller';
 
 const router = Router();
 
@@ -31,22 +37,22 @@ const router = Router();
  *             properties:
  *               username: { type: string, example: "bill" }
  *               password: { type: string, format: password, example: "Sup3r$ecret!" }
- *               email:    { type: string, format: email, example: "bill@example.com" }
+ *               email: { type: string, format: email, example: "bill@example.com" }
  *               fullName: { type: string, example: "Bill Bill" }
- *               dob:      { type: string, format: date, example: "2000-01-31" }
+ *               dob: { type: string, format: date, example: "2000-01-31" }
  *               address:
  *                 oneOf:
  *                   - type: string
  *                     example: "A12, Vinhomes Grand Park, TP. Thủ Đức"
  *                   - type: object
  *                     properties:
- *                       line1:      { type: string, example: "A12, Vinhomes Grand Park" }
- *                       line2:      { type: string, example: "Block S5.02, Apt 15.08" }
- *                       ward:       { type: string, example: "Long Thạnh Mỹ" }
- *                       district:   { type: string, example: "TP. Thủ Đức" }
- *                       city:       { type: string, example: "Hồ Chí Minh" }
- *                       province:   { type: string, example: "Hồ Chí Minh" }
- *                       country:    { type: string, example: "VN" }
+ *                       line1: { type: string, example: "A12, Vinhomes Grand Park" }
+ *                       line2: { type: string, example: "Block S5.02, Apt 15.08" }
+ *                       ward: { type: string, example: "Long Thạnh Mỹ" }
+ *                       district: { type: string, example: "TP. Thủ Đức" }
+ *                       city: { type: string, example: "Hồ Chí Minh" }
+ *                       province: { type: string, example: "Hồ Chí Minh" }
+ *                       country: { type: string, example: "VN" }
  *                       postalCode: { type: string, example: "700000" }
  *     responses:
  *       201: { description: User created }
@@ -116,8 +122,8 @@ router.get('/profile', authenticateToken, authorizeRoles('admin', 'staff', 'user
  *             type: object
  *             properties:
  *               username: { type: string, example: "meomeo.new" }
- *               email:    { type: string, format: email, example: "meomeo.new@example.com" }
- *               phone:    { type: string, example: "+84901234567" }
+ *               email: { type: string, format: email, example: "meomeo.new@example.com" }
+ *               phone: { type: string, example: "+84901234567" }
  *               fullName: { type: string, example: "Meo Meo" }
  *               dob:
  *                 oneOf:
@@ -154,8 +160,8 @@ router.put('/profile', authenticateToken, authorizeRoles('admin', 'staff', 'user
  *     summary: Change password (self)
  *     description: |
  *       Requires JWT token. Roles allowed: admin, staff, user.
- *       - Yêu cầu `oldPassword` và `newPassword`.
- *       - `newPassword` tối thiểu 8 ký tự và phải khác mật khẩu cũ.
+ *       - Yêu cầu oldPassword và newPassword.
+ *       - newPassword tối thiểu 8 ký tự và phải khác mật khẩu cũ.
  *     security: [ { bearerAuth: [] } ]
  *     requestBody:
  *       required: true
@@ -193,4 +199,99 @@ router.put('/password', authenticateToken, authorizeRoles('admin', 'staff', 'use
  */
 router.get('/get-all', authenticateToken, authorizeRoles('admin'), getAllUsersController);
 
+router.post('/password/forgot', forgotPasswordController);
+/**
+ * @swagger
+ * /users/password/forgot:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Request password reset (send OTP + link)
+ *     description: Gửi email chứa OTP 6 số và liên kết đặt lại mật khẩu. Luôn trả 200 để tránh user enumeration.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email: { type: string, format: email, example: "user@example.com" }
+ *     responses:
+ *       200: { description: If the email exists, an OTP and reset link have been sent }
+ *       400: { description: Invalid email }
+ *       500: { description: Server error }
+ */
+
+router.get('/password/verify', verifyResetTokenController);
+/**
+ * @swagger
+ * /users/password/verify:
+ *   get:
+ *     tags: [Authentication]
+ *     summary: Verify reset token (legacy: requires uid)
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: uid
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Token is valid }
+ *       400: { description: Invalid/expired token }
+ */
+
+router.get('/password/otp/verify', verifyResetOtpController);
+/**
+ * @swagger
+ * /users/password/otp/verify:
+ *   get:
+ *     tags: [Authentication]
+ *     summary: Verify reset OTP (legacy: requires uid)
+ *     parameters:
+ *       - in: query
+ *         name: otp
+ *         required: true
+ *         schema: { type: string, example: "123456" }
+ *       - in: query
+ *         name: uid
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: OTP is valid }
+ *       400: { description: Invalid/expired otp }
+ */
+
+router.post('/password/reset', resetPasswordController);
+/**
+ * @swagger
+ * /users/password/reset:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Reset password with token or OTP (no uid)
+ *     description: Đặt lại mật khẩu bằng **email + token** hoặc **email + otp**.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email: { type: string, format: email, example: "user@example.com" }
+ *               token: { type: string, description: "Reset token từ link (trong email)" }
+ *               otp: { type: string, description: "OTP 6 số từ email", example: "123456" }
+ *               newPassword: { type: string, format: password, example: "N3wP@ssw0rd!" }
+ *               confirmNewPassword: { type: string, format: password }
+ *             oneOf:
+ *               - required: [email, token, newPassword]
+ *               - required: [email, otp, newPassword]
+ *     responses:
+ *       200: { description: Password has been reset }
+ *       400: { description: Invalid input or token/otp }
+ *       404: { description: User not found }
+ */
+
 export default router;
+
