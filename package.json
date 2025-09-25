@@ -4,7 +4,7 @@
   "description": "Node.js backend API with TypeScript and database ready to connect",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon --exec \"node -r ts-node/register -r dotenv/config\" src/index.ts",
     "build": "tsc && node scripts/generate-swagger.js",
     "start": "node dist/index.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
@@ -29,6 +29,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
+    "@types/nodemailer": "^6.4.15",
     "eslint": "^8.56.0",
     "nodemon": "^3.0.2",
     "ts-node": "^10.9.2",
@@ -42,6 +43,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.3",
+    "nodemailer": "^7.0.6",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   }
