@@ -1,45 +1,43 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from "mongoose";
 
-export type ChargingStationStatus = 'active' | 'inactive' | 'maintenance';
+export type ChargingStationStatus = "active" | "inactive" | "maintenance";
 
 export interface IChargingStation extends Document {
-  name: string;               // tên trạm sạc
-  longitude: number;          // kinh độ (-180..180)
-  latitude: number;           // vĩ độ  (-90..90)
+  name: string;
+  longitude: number;
+  latitude: number;
   status: ChargingStationStatus;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const ChargingStationSchema: Schema<IChargingStation> = new Schema<IChargingStation>(
-  {
-    name: { type: String, required: true, trim: true },
-    longitude: { type: Number, required: true, min: -180, max: 180 },
-    latitude: { type: Number, required: true, min: -90, max: 90 },
-    status: {
-      type: String,
-      enum: ['active', 'inactive', 'maintenance'],
-      default: 'active',
-      required: true,
+const ChargingStationSchema: Schema<IChargingStation> =
+  new Schema<IChargingStation>(
+    {
+      name: { type: String, required: true, trim: true },
+      longitude: { type: Number, required: true, min: -180, max: 180 },
+      latitude: { type: Number, required: true, min: -90, max: 90 },
+      status: {
+        type: String,
+        enum: ["active", "inactive", "maintenance"],
+        default: "active",
+        required: true,
+      },
     },
-  },
-  { timestamps: true }
-);
+    { timestamps: true }
+  );
 
-// Index gợi ý
 ChargingStationSchema.index({ name: 1 });
 ChargingStationSchema.index({ longitude: 1, latitude: 1 });
 
-// Virtual populate: station.ports -> ChargingPort[]
-ChargingStationSchema.virtual('ports', {
-  ref: 'ChargingPort',
-  localField: '_id',
-  foreignField: 'station',
+ChargingStationSchema.virtual("ports", {
+  ref: "ChargingPort",
+  localField: "_id",
+  foreignField: "station",
   justOne: false,
 });
 
-// Chuẩn hóa JSON giống user.model
-ChargingStationSchema.set('toJSON', {
+ChargingStationSchema.set("toJSON", {
   virtuals: true,
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id;
@@ -51,4 +49,4 @@ ChargingStationSchema.set('toJSON', {
 
 export const ChargingStation: Model<IChargingStation> =
   mongoose.models.ChargingStation ||
-  mongoose.model<IChargingStation>('ChargingStation', ChargingStationSchema);
+  mongoose.model<IChargingStation>("ChargingStation", ChargingStationSchema);

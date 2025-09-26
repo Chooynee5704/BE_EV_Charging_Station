@@ -1,20 +1,57 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createChargingStationController,
   listChargingStationsController,
   getChargingStationByIdController,
   updateChargingStationController,
-  deleteChargingStationController
-} from '../controllers/chargingstation.controller';
-import { authenticateToken, authorizeRoles } from '../middleware/auth.middleware';
+  deleteChargingStationController,
+} from "../controllers/chargingstation.controller";
+import {
+  authenticateToken,
+  authorizeRoles,
+} from "../middleware/auth.middleware";
 
-const router = Router();
+const router = Router(); // mount ở app.use('/stations', router)
 
 /**
  * @swagger
  * tags:
  *   - name: ChargingStations
- *     description: CRUD for EV charging stations
+ *     description: CRUD for EV charging stations (with nested charging ports)
+ */
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     ChargingPortCreate:
+ *       type: object
+ *       required: [type, powerKw, speed, price]
+ *       properties:
+ *         type:
+ *           type: string
+ *           enum: [CCS, CHAdeMO, AC]
+ *         status:
+ *           type: string
+ *           enum: [available, in_use]
+ *           default: available
+ *         powerKw:
+ *           type: number
+ *           example: 60
+ *         speed:
+ *           type: string
+ *           enum: [fast, slow]
+ *         price:
+ *           type: number
+ *           example: 3500
+ *     ChargingPortUpsert:
+ *       allOf:
+ *         - $ref: '#/components/schemas/ChargingPortCreate'
+ *         - type: object
+ *           properties:
+ *             id:
+ *               type: string
+ *               description: Existing port id for update; omit to create new
  */
 
 /**
@@ -22,7 +59,7 @@ const router = Router();
  * /stations:
  *   post:
  *     tags: [ChargingStations]
- *     summary: Create charging station
+ *     summary: Create charging station (with optional ports)
  *     security: [ { bearerAuth: [] } ]
  *     requestBody:
  *       required: true
@@ -39,19 +76,28 @@ const router = Router();
  *                 type: string
  *                 enum: [active, inactive, maintenance]
  *                 example: active
+ *               ports:
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/ChargingPortCreate'
  *     responses:
  *       201: { description: Created }
  *       400: { description: Validation error }
  *       401: { description: Unauthorized }
  */
-router.post('/', authenticateToken, authorizeRoles('admin', 'staff'), createChargingStationController);
+router.post(
+  "/",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
+  createChargingStationController
+);
 
 /**
  * @swagger
  * /stations:
  *   get:
  *     tags: [ChargingStations]
- *     summary: List charging stations (filter/pagination)
+ *     summary: List charging stations (filter/pagination, ports populated by default)
  *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: query
@@ -68,19 +114,24 @@ router.post('/', authenticateToken, authorizeRoles('admin', 'staff'), createChar
  *         schema: { type: integer, example: 20 }
  *       - in: query
  *         name: includePorts
- *         schema: { type: boolean, example: false }
+ *         schema: { type: boolean, example: true }
  *     responses:
  *       200: { description: OK }
  *       401: { description: Unauthorized }
  */
-router.get('/', authenticateToken, authorizeRoles('admin', 'staff', 'user'), listChargingStationsController);
+router.get(
+  "/",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  listChargingStationsController
+);
 
 /**
  * @swagger
  * /stations/{id}:
  *   get:
  *     tags: [ChargingStations]
- *     summary: Get charging station by id
+ *     summary: Get charging station by id (ports populated by default)
  *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: path
@@ -89,20 +140,28 @@ router.get('/', authenticateToken, authorizeRoles('admin', 'staff', 'user'), lis
  *         schema: { type: string }
  *       - in: query
  *         name: includePorts
- *         schema: { type: boolean, example: false }
+ *         schema: { type: boolean, example: true }
  *     responses:
  *       200: { description: OK }
  *       401: { description: Unauthorized }
  *       404: { description: Not found }
  */
-router.get('/:id', authenticateToken, authorizeRoles('admin', 'staff', 'user'), getChargingStationByIdController);
+router.get(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  getChargingStationByIdController
+);
 
 /**
  * @swagger
  * /stations/{id}:
  *   put:
  *     tags: [ChargingStations]
- *     summary: Update charging station
+ *     summary: Update charging station + sync ports
+ *     description: |
+ *       - Send `ports` with items that include `id` to update existing ports, and items without `id` to create new.
+ *       - By default, ports not included will be **deleted** (`removeMissingPorts=true`). Set `removeMissingPorts=false` to keep them.
  *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: path
@@ -122,13 +181,25 @@ router.get('/:id', authenticateToken, authorizeRoles('admin', 'staff', 'user'), 
  *               status:
  *                 type: string
  *                 enum: [active, inactive, maintenance]
+ *               ports:
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/ChargingPortUpsert'
+ *               removeMissingPorts:
+ *                 type: boolean
+ *                 default: true
  *     responses:
  *       200: { description: Updated }
  *       400: { description: Validation error }
  *       401: { description: Unauthorized }
  *       404: { description: Not found }
  */
-router.put('/:id', authenticateToken, authorizeRoles('admin', 'staff'), updateChargingStationController);
+router.put(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
+  updateChargingStationController
+);
 
 /**
  * @swagger
@@ -148,6 +219,11 @@ router.put('/:id', authenticateToken, authorizeRoles('admin', 'staff'), updateCh
  *       404: { description: Not found }
  *       409: { description: Conflict — station has charging ports }
  */
-router.delete('/:id', authenticateToken, authorizeRoles('admin'), deleteChargingStationController);
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("admin"),
+  deleteChargingStationController
+);
 
 export default router;
