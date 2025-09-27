@@ -10,16 +10,13 @@ import stationRoutes from "./routes/chargingstation.routes";
 import { specs } from "./config/swagger";
 import { User } from "./models/user.model";
 
-// Load env
 dotenv.config();
 
 const app: Express = express();
 const port = process.env.PORT || 3000;
 
-// --- Proxy aware (Render sits behind a proxy) ---
 app.set("trust proxy", 1);
 
-// --- CORS: allow FE & same-origin Swagger ---
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
@@ -29,7 +26,7 @@ const allowedOrigins = [
 
 const corsOptions: cors.CorsOptions = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true); // Postman/curl
+    if (!origin) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
     return cb(new Error(`CORS blocked for origin: ${origin}`));
   },
@@ -39,20 +36,16 @@ const corsOptions: cors.CorsOptions = {
   maxAge: 600,
 };
 
-// --- Security headers (relax CSP so Swagger UI works) ---
 app.use(
   helmet({
     contentSecurityPolicy: false,
   })
 );
-
-// --- Core middleware ---
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- Swagger UI ---
 app.use(
   "/api-docs",
   swaggerUi.serve,
@@ -63,13 +56,12 @@ app.use(
   })
 );
 
-// --- Routes ---
+// Routes
 app.use("/users", userRoutes);
 app.use("/stations", stationRoutes);
 
 /**
  * Seed default admin & staff if not exists
- * - Password mặc định: 12345678 (override bằng DEFAULT_SEED_PASSWORD)
  */
 async function seedDefaultUsers() {
   try {
@@ -126,9 +118,6 @@ async function seedDefaultUsers() {
  *   get:
  *     tags: [System]
  *     summary: Kiểm tra tình trạng server
- *     responses:
- *       200:
- *         description: Server đang hoạt động bình thường
  */
 app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({
@@ -145,9 +134,6 @@ app.get("/health", (_req: Request, res: Response) => {
  *   get:
  *     tags: [System]
  *     summary: API Information
- *     responses:
- *       200:
- *         description: Thông tin API
  */
 app.get("/", (_req: Request, res: Response) => {
   res.status(200).json({
@@ -164,18 +150,24 @@ app.get("/", (_req: Request, res: Response) => {
         getAll: "GET /users/get-all (Protected)",
       },
       stations: {
-        create: "POST /stations (Protected: admin, staff)",
-        list: "GET /stations (Protected: all roles)",
-        getById: "GET /stations/:id (Protected: all roles)",
-        update: "PUT /stations/:id (Protected: admin, staff)",
-        delete: "DELETE /stations/:id (Protected: admin)",
+        create: "POST /stations (admin, staff)",
+        list: "GET /stations (admin, staff, user)",
+        getById: "GET /stations/:id (admin, staff, user)",
+        update: "PUT /stations/:id (admin, staff)",
+        delete: "DELETE /stations/:id (admin)",
       },
       ports: {
-        create: "POST /ports (Protected: admin, staff)",
-        list: "GET /ports (Protected: all roles)",
-        getById: "GET /ports/:id (Protected: all roles)",
-        update: "PUT /ports/:id (Protected: admin, staff)",
-        delete: "DELETE /ports/:id (Protected: admin)",
+        create: "POST /stations/ports (admin, staff) — body requires stationId",
+        getById: "GET /stations/ports/:portId (admin, staff, user)",
+        update: "PUT /stations/ports/:portId (admin, staff)",
+        delete: "DELETE /stations/ports/:portId (admin)",
+      },
+      slots: {
+        listByPort: "GET /stations/ports/:portId/slots (admin, staff, user)",
+        createInPort: "POST /stations/ports/:portId/slots (admin, staff)",
+        getById: "GET /stations/slots/:slotId (admin, staff, user)",
+        updateById: "PUT /stations/slots/:slotId (admin, staff)",
+        deleteById: "DELETE /stations/slots/:slotId (admin)",
       },
     },
   });
@@ -216,7 +208,6 @@ const startServer = async (): Promise<void> => {
   }
 };
 
-// Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("SIGTERM received, shutting down gracefully...");
   process.exit(0);
