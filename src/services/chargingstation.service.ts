@@ -10,6 +10,13 @@ import {
   PortStatus,
   ChargeSpeed,
 } from "../models/chargingport.model";
+import {
+  ChargingSlot,
+  IChargingSlot,
+  ChargingSlotStatus,
+} from "../models/chargingslot.model";
+
+/* ======================= Types ======================= */
 
 export interface CreateStationInput {
   name: string;
@@ -45,9 +52,31 @@ export type PortCreateInput = {
   price: number;
 };
 
-export type PortUpsertInput = PortCreateInput & {
-  id?: string; // only present when updating an existing port
+export type PortUpsertInput = PortCreateInput & { id?: string };
+export type PortUpdateInput = Partial<PortCreateInput>;
+
+/* --------- Slots --------- */
+export type SlotCreateInput = {
+  order?: number; // integer >= 1; if missing, auto-assign next order
+  status?: ChargingSlotStatus; // default: 'available'
+  nextAvailableAt?: Date | null; // default: null (forced null when status is 'available')
 };
+export type SlotUpdateInput = Partial<SlotCreateInput>;
+
+/* ======================= Helpers ======================= */
+
+function ensureValidObjectId(id: string, fieldName = "id") {
+  if (!id) {
+    const e: any = new Error(`${fieldName} is required`);
+    e.status = 400;
+    throw e;
+  }
+  if (!Types.ObjectId.isValid(id)) {
+    const e: any = new Error(`${fieldName} is not a valid ObjectId`);
+    e.status = 400;
+    throw e;
+  }
+}
 
 function assertCoords(longitude?: number, latitude?: number) {
   if (longitude !== undefined && (longitude < -180 || longitude > 180)) {
@@ -86,7 +115,7 @@ function sanitizePortsCreate(ports?: PortCreateInput[]): PortCreateInput[] {
       e.status = 400;
       throw e;
     }
-    if (!speed || !["fast", "slow"].includes(speed)) {
+    if (!["fast", "slow"].includes(speed as any)) {
       const e: any = new Error(`ports[${idx}].speed invalid`);
       e.status = 400;
       throw e;
@@ -136,7 +165,7 @@ function sanitizePortsUpsert(ports?: PortUpsertInput[]): PortUpsertInput[] {
       e.status = 400;
       throw e;
     }
-    if (!speed || !["fast", "slow"].includes(speed)) {
+    if (!["fast", "slow"].includes(speed as any)) {
       const e: any = new Error(`ports[${idx}].speed invalid`);
       e.status = 400;
       throw e;
@@ -154,12 +183,13 @@ function sanitizePortsUpsert(ports?: PortUpsertInput[]): PortUpsertInput[] {
       speed,
       price,
     };
-    // CHỈ thêm id khi có – tránh { id: undefined } với exactOptionalPropertyTypes
     return id
       ? ({ id, ...base } as PortUpsertInput)
       : (base as PortUpsertInput);
   });
 }
+
+/* ======================= Station CRUD ======================= */
 
 export async function createStation(input: CreateStationInput) {
   const { name, longitude, latitude, status, ports } = input;
@@ -180,7 +210,7 @@ export async function createStation(input: CreateStationInput) {
   const session = await mongoose.startSession();
 
   try {
-    let stationId: string | null = null; // <<< fix: dùng string thay vì ObjectId
+    let stationId: string | null = null;
 
     await session.withTransaction(async () => {
       const created = await new ChargingStation({
@@ -190,12 +220,12 @@ export async function createStation(input: CreateStationInput) {
         ...(status ? { status } : {}),
       }).save({ session });
 
-      stationId = String(created._id); // <<< convert sang string an toàn
+      stationId = String(created._id);
 
       if (portsSan.length > 0) {
         const portDocs = portsSan.map((p) => ({
           ...p,
-          station: new Types.ObjectId(stationId!), // <<< tạo ObjectId khi cần
+          station: new Types.ObjectId(stationId!),
         }));
         await ChargingPort.insertMany(portDocs, { session });
       }
@@ -211,11 +241,7 @@ export async function createStation(input: CreateStationInput) {
 }
 
 export async function getStationById(id: string, includePorts = true) {
-  if (!id) {
-    const e: any = new Error("id is required");
-    e.status = 400;
-    throw e;
-  }
+  ensureValidObjectId(id, "id");
 
   let query = ChargingStation.findById(id);
   if (includePorts !== false) query = query.populate("ports");
@@ -226,7 +252,6 @@ export async function getStationById(id: string, includePorts = true) {
     e.status = 404;
     throw e;
   }
-
   return doc.toJSON();
 }
 
@@ -237,12 +262,14 @@ export async function listStations(opts: ListStationsOptions = {}) {
   if (status) filter.status = status;
   if (name) filter.name = { $regex: new RegExp(name.trim(), "i") };
 
-  const skip = (Math.max(page, 1) - 1) * Math.max(limit, 1);
+  const safeLimit = Math.max(Number(limit) || 1, 1);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const skip = (safePage - 1) * safeLimit;
 
   let q = ChargingStation.find(filter)
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(Math.max(limit, 1));
+    .limit(safeLimit);
   if (includePorts !== false) q = q.populate("ports");
 
   const [docs, total] = await Promise.all([
@@ -253,10 +280,10 @@ export async function listStations(opts: ListStationsOptions = {}) {
   return {
     items: docs.map((d) => d.toJSON()),
     pagination: {
-      page: Math.max(page, 1),
-      limit: Math.max(limit, 1),
+      page: safePage,
+      limit: safeLimit,
       total,
-      pages: Math.ceil(total / Math.max(limit, 1)),
+      pages: Math.ceil(total / safeLimit),
     },
   };
 }
@@ -272,11 +299,7 @@ export async function updateStation(input: UpdateStationInput) {
     removeMissingPorts = true,
   } = input;
 
-  if (!id) {
-    const e: any = new Error("id is required");
-    e.status = 400;
-    throw e;
-  }
+  ensureValidObjectId(id, "id");
 
   if (
     name === undefined &&
@@ -392,11 +415,7 @@ export async function updateStation(input: UpdateStationInput) {
 }
 
 export async function deleteStation(id: string) {
-  if (!id) {
-    const e: any = new Error("id is required");
-    e.status = 400;
-    throw e;
-  }
+  ensureValidObjectId(id, "id");
 
   const portsCount = await ChargingPort.countDocuments({ station: id });
   if (portsCount > 0) {
@@ -412,5 +431,317 @@ export async function deleteStation(id: string) {
     throw e;
   }
 
+  return deleted.toJSON();
+}
+
+/* ============== Port operations (REFAC) ============== */
+
+function validatePortPayload(
+  p: PortCreateInput | PortUpdateInput,
+  path = "port"
+) {
+  if (
+    "type" in p &&
+    p.type !== undefined &&
+    !["CCS", "CHAdeMO", "AC"].includes(p.type as any)
+  ) {
+    const e: any = new Error(`${path}.type invalid`);
+    e.status = 400;
+    throw e;
+  }
+  if (
+    "status" in p &&
+    p.status !== undefined &&
+    !["available", "in_use"].includes(p.status as any)
+  ) {
+    const e: any = new Error(`${path}.status invalid`);
+    e.status = 400;
+    throw e;
+  }
+  if (
+    "powerKw" in p &&
+    p.powerKw !== undefined &&
+    (typeof p.powerKw !== "number" || p.powerKw < 1)
+  ) {
+    const e: any = new Error(`${path}.powerKw must be >= 1`);
+    e.status = 400;
+    throw e;
+  }
+  if (
+    "speed" in p &&
+    p.speed !== undefined &&
+    !["fast", "slow"].includes(p.speed as any)
+  ) {
+    const e: any = new Error(`${path}.speed invalid`);
+    e.status = 400;
+    throw e;
+  }
+  if (
+    "price" in p &&
+    p.price !== undefined &&
+    (typeof p.price !== "number" || p.price < 0)
+  ) {
+    const e: any = new Error(`${path}.price must be >= 0`);
+    e.status = 400;
+    throw e;
+  }
+
+  if (
+    !("type" in p) &&
+    !("status" in p) &&
+    !("powerKw" in p) &&
+    !("speed" in p) &&
+    !("price" in p)
+  ) {
+    const e: any = new Error(`${path}: no fields provided`);
+    e.status = 400;
+    throw e;
+  }
+}
+
+export async function createPort(stationId: string, payload: PortCreateInput) {
+  ensureValidObjectId(stationId, "stationId");
+  validatePortPayload(payload, "port");
+
+  const station = await ChargingStation.findById(stationId);
+  if (!station) {
+    const e: any = new Error("Charging station not found");
+    e.status = 404;
+    throw e;
+  }
+
+  const created = await ChargingPort.create({
+    station: new Types.ObjectId(stationId),
+    type: payload.type,
+    status: payload.status ?? "available",
+    powerKw: payload.powerKw,
+    speed: payload.speed,
+    price: payload.price,
+  });
+
+  return created.toJSON();
+}
+
+export async function getPortById(portId: string) {
+  ensureValidObjectId(portId, "portId");
+  const port = await ChargingPort.findById(portId);
+  if (!port) {
+    const e: any = new Error("Port not found");
+    e.status = 404;
+    throw e;
+  }
+  return port.toJSON();
+}
+
+export async function updatePort(portId: string, patch: PortUpdateInput) {
+  ensureValidObjectId(portId, "portId");
+  validatePortPayload(patch, "port");
+
+  const setOps: any = {};
+  if (patch.type !== undefined) setOps.type = patch.type;
+  if (patch.status !== undefined) setOps.status = patch.status;
+  if (patch.powerKw !== undefined) setOps.powerKw = patch.powerKw;
+  if (patch.speed !== undefined) setOps.speed = patch.speed;
+  if (patch.price !== undefined) setOps.price = patch.price;
+
+  const updated = await ChargingPort.findOneAndUpdate(
+    { _id: portId },
+    { $set: setOps },
+    { new: true, runValidators: true }
+  );
+
+  if (!updated) {
+    const e: any = new Error("Port not found");
+    e.status = 404;
+    throw e;
+  }
+
+  return updated.toJSON();
+}
+
+export async function deletePort(portId: string) {
+  ensureValidObjectId(portId, "portId");
+
+  const deleted = await ChargingPort.findOneAndDelete({
+    _id: portId,
+  });
+  if (!deleted) {
+    const e: any = new Error("Port not found");
+    e.status = 404;
+    throw e;
+  }
+
+  return deleted.toJSON();
+}
+
+/* ============== Slot operations (REFAC with `order`) ============== */
+
+function isPositiveInt(n: any) {
+  return typeof n === "number" && Number.isInteger(n) && n >= 1;
+}
+
+function validateSlotPayload(
+  p: SlotCreateInput | SlotUpdateInput,
+  path = "slot"
+) {
+  if (
+    "status" in p &&
+    p.status !== undefined &&
+    !["available", "booked", "in_use"].includes(p.status as any)
+  ) {
+    const e: any = new Error(`${path}.status invalid`);
+    e.status = 400;
+    throw e;
+  }
+  if ("order" in p && p.order !== undefined && !isPositiveInt(p.order)) {
+    const e: any = new Error(`${path}.order must be a positive integer`);
+    e.status = 400;
+    throw e;
+  }
+  if (!("status" in p) && !("nextAvailableAt" in p) && !("order" in p)) {
+    const e: any = new Error(`${path}: no fields provided`);
+    e.status = 400;
+    throw e;
+  }
+}
+
+async function ensurePortExists(portId: string) {
+  const port = await ChargingPort.findById(portId);
+  if (!port) {
+    const e: any = new Error("Port not found");
+    e.status = 404;
+    throw e;
+  }
+  return port;
+}
+
+// List all slots of a port
+export async function listSlotsByPort(portId: string) {
+  ensureValidObjectId(portId, "portId");
+  await ensurePortExists(portId);
+
+  const slots = await ChargingSlot.find({ port: portId }).sort({
+    order: 1,
+    createdAt: -1,
+  });
+  return slots.map((s) => s.toJSON());
+}
+
+// Get single slot by id
+export async function getSlotById(slotId: string) {
+  ensureValidObjectId(slotId, "slotId");
+
+  const slot = await ChargingSlot.findById(slotId);
+  if (!slot) {
+    const e: any = new Error("Slot not found");
+    e.status = 404;
+    throw e;
+  }
+  return slot.toJSON();
+}
+
+// Create slot in a port
+export async function addSlotToPort(portId: string, payload: SlotCreateInput) {
+  ensureValidObjectId(portId, "portId");
+  validateSlotPayload(payload, "slot");
+  await ensurePortExists(portId);
+
+  // Determine final status and nextAvailableAt
+  const finalStatus = payload.status ?? "available";
+  const finalNextAvailableAt =
+    finalStatus === "available" ? null : payload.nextAvailableAt ?? null;
+
+  // Determine order: use provided, or auto-assign next
+  let finalOrder: number;
+  if (payload.order !== undefined) {
+    finalOrder = payload.order;
+  } else {
+    const last = await ChargingSlot.findOne({ port: portId })
+      .sort({ order: -1 })
+      .select({ order: 1 })
+      .lean();
+    finalOrder = last?.order ? last.order + 1 : 1;
+  }
+
+  const data: Partial<IChargingSlot> = {
+    port: new Types.ObjectId(portId),
+    order: finalOrder,
+    status: finalStatus,
+    nextAvailableAt: finalNextAvailableAt,
+  };
+
+  try {
+    const created = await ChargingSlot.create(data);
+    return created.toJSON();
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      const e: any = new Error("Slot order already exists in this port");
+      e.status = 409;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+// Update a slot by id
+export async function updateSlot(slotId: string, patch: SlotUpdateInput) {
+  ensureValidObjectId(slotId, "slotId");
+  validateSlotPayload(patch, "slot");
+
+  // Load current to enforce business rules and resolve default behavior
+  const current = await ChargingSlot.findById(slotId);
+  if (!current) {
+    const e: any = new Error("Slot not found");
+    e.status = 404;
+    throw e;
+  }
+
+  const targetStatus = patch.status ?? current.status;
+  const setOps: any = {};
+
+  if (patch.order !== undefined) setOps.order = patch.order;
+  if (patch.status !== undefined) setOps.status = patch.status;
+
+  if (patch.nextAvailableAt !== undefined) {
+    setOps.nextAvailableAt = patch.nextAvailableAt;
+  }
+
+  // If becoming (or remaining) 'available', force nextAvailableAt null
+  if (targetStatus === "available") {
+    setOps.nextAvailableAt = null;
+  }
+
+  try {
+    const updated = await ChargingSlot.findOneAndUpdate(
+      { _id: slotId },
+      { $set: setOps },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      const e: any = new Error("Slot not found");
+      e.status = 404;
+      throw e;
+    }
+    return updated.toJSON();
+  } catch (err: any) {
+    if (err?.code === 11000) {
+      const e: any = new Error("Slot order already exists in this port");
+      e.status = 409;
+      throw e;
+    }
+    throw err;
+  }
+}
+
+// Delete a slot by id
+export async function deleteSlot(slotId: string) {
+  ensureValidObjectId(slotId, "slotId");
+
+  const deleted = await ChargingSlot.findOneAndDelete({ _id: slotId });
+  if (!deleted) {
+    const e: any = new Error("Slot not found");
+    e.status = 404;
+    throw e;
+  }
   return deleted.toJSON();
 }

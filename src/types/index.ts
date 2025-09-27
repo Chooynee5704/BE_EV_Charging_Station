@@ -1,5 +1,5 @@
-﻿import { Request } from 'express';
-import type { UserRole } from '../models/user.model';
+﻿import { Request } from "express";
+import type { UserRole } from "../models/user.model";
 
 // Extended Express request populated by auth middleware
 export interface AuthenticatedRequest extends Request {
