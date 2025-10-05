@@ -23,6 +23,8 @@ export interface CreateStationInput {
   longitude: number;
   latitude: number;
   status?: ChargingStationStatus;
+  address?: string;
+  provider?: string;
   ports?: PortCreateInput[];
 }
 
@@ -32,6 +34,8 @@ export interface UpdateStationInput {
   longitude?: number;
   latitude?: number;
   status?: ChargingStationStatus;
+  address?: string;
+  provider?: string;
   ports?: PortUpsertInput[];
   removeMissingPorts?: boolean; // default true
 }
@@ -39,6 +43,8 @@ export interface UpdateStationInput {
 export interface ListStationsOptions {
   status?: ChargingStationStatus;
   name?: string;
+  address?: string;
+  provider?: string;
   page?: number;
   limit?: number;
   includePorts?: boolean; // default true
@@ -192,7 +198,7 @@ function sanitizePortsUpsert(ports?: PortUpsertInput[]): PortUpsertInput[] {
 /* ======================= Station CRUD ======================= */
 
 export async function createStation(input: CreateStationInput) {
-  const { name, longitude, latitude, status, ports } = input;
+  const { name, longitude, latitude, status, address, provider, ports } = input;
 
   if (!name || typeof name !== "string") {
     const e: any = new Error("name is required");
@@ -218,6 +224,8 @@ export async function createStation(input: CreateStationInput) {
         longitude,
         latitude,
         ...(status ? { status } : {}),
+        ...(address ? { address: String(address).trim() } : {}),
+        ...(provider ? { provider: String(provider).trim() } : {}),
       }).save({ session });
 
       stationId = String(created._id);
@@ -256,11 +264,21 @@ export async function getStationById(id: string, includePorts = true) {
 }
 
 export async function listStations(opts: ListStationsOptions = {}) {
-  const { status, name, page = 1, limit = 20, includePorts = true } = opts;
+  const {
+    status,
+    name,
+    address,
+    provider,
+    page = 1,
+    limit = 20,
+    includePorts = true,
+  } = opts;
 
   const filter: any = {};
   if (status) filter.status = status;
   if (name) filter.name = { $regex: new RegExp(name.trim(), "i") };
+  if (address) filter.address = { $regex: new RegExp(address.trim(), "i") };
+  if (provider) filter.provider = { $regex: new RegExp(provider.trim(), "i") };
 
   const safeLimit = Math.max(Number(limit) || 1, 1);
   const safePage = Math.max(Number(page) || 1, 1);
@@ -295,6 +313,8 @@ export async function updateStation(input: UpdateStationInput) {
     longitude,
     latitude,
     status,
+    address,
+    provider,
     ports,
     removeMissingPorts = true,
   } = input;
@@ -306,6 +326,8 @@ export async function updateStation(input: UpdateStationInput) {
     longitude === undefined &&
     latitude === undefined &&
     status === undefined &&
+    address === undefined &&
+    provider === undefined &&
     ports === undefined
   ) {
     const e: any = new Error("No fields to update");
@@ -322,6 +344,10 @@ export async function updateStation(input: UpdateStationInput) {
   if (longitude !== undefined) setOps.longitude = longitude;
   if (latitude !== undefined) setOps.latitude = latitude;
   if (status !== undefined) setOps.status = status;
+  if (address !== undefined)
+    setOps.address = address ? String(address).trim() : undefined;
+  if (provider !== undefined)
+    setOps.provider = provider ? String(provider).trim() : undefined;
 
   const portsSan = ports ? sanitizePortsUpsert(ports) : [];
   const session = await mongoose.startSession();
@@ -646,7 +672,6 @@ export async function addSlotToPort(portId: string, payload: SlotCreateInput) {
   validateSlotPayload(payload, "slot");
   await ensurePortExists(portId);
 
-  // Determine final status and nextAvailableAt
   const finalStatus = payload.status ?? "available";
   const finalNextAvailableAt =
     finalStatus === "available" ? null : payload.nextAvailableAt ?? null;
@@ -688,7 +713,6 @@ export async function updateSlot(slotId: string, patch: SlotUpdateInput) {
   ensureValidObjectId(slotId, "slotId");
   validateSlotPayload(patch, "slot");
 
-  // Load current to enforce business rules and resolve default behavior
   const current = await ChargingSlot.findById(slotId);
   if (!current) {
     const e: any = new Error("Slot not found");
@@ -706,7 +730,6 @@ export async function updateSlot(slotId: string, patch: SlotUpdateInput) {
     setOps.nextAvailableAt = patch.nextAvailableAt;
   }
 
-  // If becoming (or remaining) 'available', force nextAvailableAt null
   if (targetStatus === "available") {
     setOps.nextAvailableAt = null;
   }

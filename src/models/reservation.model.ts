@@ -6,18 +6,21 @@ export type ReservationStatus =
   | "cancelled"
   | "completed";
 
-export interface IReservation extends Document {
-  // RESERVATIONSId: dùng _id của Mongo; khi toJSON sẽ map thành `id`
+export interface IReservationItem {
   slot: Types.ObjectId; // ref -> ChargingSlot
-  user: Types.ObjectId; // ref -> User
-  startAt: Date; // start date time
-  endAt: Date; // end date time
-  status: ReservationStatus; // trạng thái: pending|confirmed|cancelled|completed
+  startAt: Date; // UTC
+  endAt: Date;   // UTC
+}
+
+export interface IReservation extends Document {
+  vehicle: Types.ObjectId; // ref -> Vehicle
+  items: IReservationItem[];
+  status: ReservationStatus;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const ReservationSchema: Schema<IReservation> = new Schema<IReservation>(
+const ReservationItemSchema = new Schema<IReservationItem>(
   {
     slot: {
       type: Schema.Types.ObjectId,
@@ -25,52 +28,83 @@ const ReservationSchema: Schema<IReservation> = new Schema<IReservation>(
       required: true,
       index: true,
     },
-    user: {
+    startAt: { type: Date, required: true, index: true },
+    endAt: { type: Date, required: true, index: true },
+  },
+  { _id: false }
+);
+
+const ReservationSchema: Schema<IReservation> = new Schema<IReservation>(
+  {
+    vehicle: {
       type: Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Vehicle",
       required: true,
       index: true,
     },
-    startAt: {
-      type: Date,
+    items: {
+      type: [ReservationItemSchema],
       required: true,
-      index: true,
-    },
-    endAt: {
-      type: Date,
-      required: true,
-      index: true,
+      validate: {
+        validator: (v: IReservationItem[]) => Array.isArray(v) && v.length > 0,
+        message: "items must contain at least one slot/time range",
+      },
     },
     status: {
       type: String,
       enum: ["pending", "confirmed", "cancelled", "completed"],
-      required: true,
       default: "pending",
+      required: true,
       index: true,
     },
   },
   { timestamps: true }
 );
 
-// Business rules:
-// - startAt must be before endAt
+// Business rules
 ReservationSchema.pre("validate", function (next) {
   const doc = this as IReservation;
-  if (doc.startAt && doc.endAt && doc.startAt >= doc.endAt) {
-    return next(new Error("startAt must be earlier than endAt"));
+
+  if (!doc.items || doc.items.length === 0) {
+    return next(new Error("items must contain at least one slot/time range"));
   }
+
+  for (const it of doc.items) {
+    if (it.startAt >= it.endAt) {
+      return next(
+        new Error("startAt must be earlier than endAt for each item")
+      );
+    }
+  }
+
+  const bySlot: Record<string, { startAt: Date; endAt: Date }[]> = {};
+  for (const it of doc.items) {
+    const key = String(it.slot);
+    bySlot[key] ??= [];
+    for (const existed of bySlot[key]) {
+      if (it.startAt < existed.endAt && it.endAt > existed.startAt) {
+        return next(
+          new Error(
+            "Duplicate/overlapping time ranges for the same slot in one reservation"
+          )
+        );
+      }
+    }
+    bySlot[key].push({ startAt: it.startAt, endAt: it.endAt });
+  }
+
   next();
 });
 
-// Helpful compound indexes for common queries
-ReservationSchema.index({ slot: 1, startAt: 1 });
-ReservationSchema.index({ user: 1, startAt: 1 });
-ReservationSchema.index({ slot: 1, status: 1, startAt: 1 });
+// Indexes
+ReservationSchema.index({ vehicle: 1, "items.startAt": 1 });
+ReservationSchema.index({ "items.slot": 1, "items.startAt": 1 });
+ReservationSchema.index({ status: 1, "items.slot": 1, "items.startAt": 1 });
 
-// Chuẩn hóa JSON giống các model khác: expose `id` thay vì `_id`
+// JSON transform
 ReservationSchema.set("toJSON", {
-  transform: (_doc: any, ret: any) => {
-    ret.id = ret._id; // đây chính là RESERVATIONSId
+  transform: (_doc: unknown, ret: any) => {
+    ret.id = ret._id;
     delete ret._id;
     delete ret.__v;
     return ret;

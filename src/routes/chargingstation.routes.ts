@@ -113,6 +113,8 @@ const router = Router(); // mounted at app.use("/stations", router)
  *               longitude: { type: number, example: 106.700981 }
  *               latitude: { type: number, example: 10.776889 }
  *               status: { type: string, enum: [active, inactive, maintenance], example: active }
+ *               address: { type: string, example: "01 Nguyễn Huệ, Q1, TP.HCM" }
+ *               provider: { type: string, example: "VinFast" }
  *               ports:
  *                 type: array
  *                 items:
@@ -142,6 +144,12 @@ router.post(
  *         schema: { type: string, enum: [active, inactive, maintenance] }
  *       - in: query
  *         name: name
+ *         schema: { type: string }
+ *       - in: query
+ *         name: address
+ *         schema: { type: string }
+ *       - in: query
+ *         name: provider
  *         schema: { type: string }
  *       - in: query
  *         name: page
@@ -216,6 +224,8 @@ router.get(
  *               longitude: { type: number }
  *               latitude: { type: number }
  *               status: { type: string, enum: [active, inactive, maintenance] }
+ *               address: { type: string }
+ *               provider: { type: string }
  *               ports:
  *                 type: array
  *                 items:
@@ -447,61 +457,6 @@ router.post(
   authorizeRoles("admin", "staff"),
   addSlotToPortController
 );
-
-/**
- * @swagger
- * /stations/slots/{slotId}:
- *   put:
- *     tags: [ChargingSlots]
- *     summary: Update a specific charging slot
- *     security: [ { bearerAuth: [] } ]
- *     parameters:
- *       - in: path
- *         name: slotId
- *         required: true
- *         schema: { type: string }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ChargingSlotUpdate'
- *     responses:
- *       200: { description: Updated }
- *       400: { description: Validation error }
- *       401: { description: Unauthorized }
- *       404: { description: Slot not found }
- *       409: { description: Conflict — slot order already exists }
- */
-router.put(
-  "/slots/:slotId",
-  authenticateToken,
-  authorizeRoles("admin", "staff"),
-  updateSlotController
-);
-
-/**
- * @swagger
- * /stations/slots/{slotId}:
- *   delete:
- *     tags: [ChargingSlots]
- *     summary: Delete a specific charging slot
- *     security: [ { bearerAuth: [] } ]
- *     parameters:
- *       - in: path
- *         name: slotId
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       200: { description: Deleted }
- *       401: { description: Unauthorized }
- *       404: { description: Slot not found }
- */
-router.delete(
-  "/slots/:slotId",
-  authenticateToken,
-  authorizeRoles("admin"),
-  deleteSlotController
-);
-
+// 👉 Fix: export cả default lẫn named để mọi cấu hình TS đều ok
+export { router as stationRoutes };
 export default router;

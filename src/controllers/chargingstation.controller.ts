@@ -33,13 +33,16 @@ export async function createChargingStationController(
   res: Response
 ) {
   try {
-    const { name, longitude, latitude, status, ports } = req.body as {
-      name?: string;
-      longitude?: number;
-      latitude?: number;
-      status?: "active" | "inactive" | "maintenance";
-      ports?: PortCreateInput[];
-    };
+    const { name, longitude, latitude, status, address, provider, ports } =
+      req.body as {
+        name?: string;
+        longitude?: number;
+        latitude?: number;
+        status?: "active" | "inactive" | "maintenance";
+        address?: string;
+        provider?: string;
+        ports?: PortCreateInput[];
+      };
 
     if (
       !name ||
@@ -59,6 +62,8 @@ export async function createChargingStationController(
       longitude,
       latitude,
       ...(status ? { status } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(provider !== undefined ? { provider } : {}),
       ...(ports ? { ports } : {}),
     };
 
@@ -79,17 +84,22 @@ export async function listChargingStationsController(
   res: Response
 ) {
   try {
-    const { status, name, page, limit, includePorts } = req.query as {
-      status?: "active" | "inactive" | "maintenance";
-      name?: string;
-      page?: string;
-      limit?: string;
-      includePorts?: string;
-    };
+    const { status, name, address, provider, page, limit, includePorts } =
+      req.query as {
+        status?: "active" | "inactive" | "maintenance";
+        name?: string;
+        address?: string;
+        provider?: string;
+        page?: string;
+        limit?: string;
+        includePorts?: string;
+      };
 
     const opts: ListStationsOptions = {
       ...(status ? { status } : {}),
       ...(name ? { name } : {}),
+      ...(address ? { address } : {}),
+      ...(provider ? { provider } : {}),
       ...(page ? { page: Number(page) } : {}),
       ...(limit ? { limit: Number(limit) } : {}),
       ...(includePorts !== undefined
@@ -142,21 +152,33 @@ export async function updateChargingStationController(
 ) {
   try {
     const { id } = req.params as { id: string };
-    const { name, longitude, latitude, status, ports, removeMissingPorts } =
-      req.body as {
-        name?: string;
-        longitude?: number;
-        latitude?: number;
-        status?: "active" | "inactive" | "maintenance";
-        ports?: PortUpsertInput[];
-        removeMissingPorts?: boolean;
-      };
+    const {
+      name,
+      longitude,
+      latitude,
+      status,
+      address,
+      provider,
+      ports,
+      removeMissingPorts,
+    } = req.body as {
+      name?: string;
+      longitude?: number;
+      latitude?: number;
+      status?: "active" | "inactive" | "maintenance";
+      address?: string;
+      provider?: string;
+      ports?: PortUpsertInput[];
+      removeMissingPorts?: boolean;
+    };
 
     if (
       name === undefined &&
       longitude === undefined &&
       latitude === undefined &&
       status === undefined &&
+      address === undefined &&
+      provider === undefined &&
       ports === undefined
     ) {
       return res
@@ -170,6 +192,8 @@ export async function updateChargingStationController(
       ...(longitude !== undefined ? { longitude } : {}),
       ...(latitude !== undefined ? { latitude } : {}),
       ...(status !== undefined ? { status } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(provider !== undefined ? { provider } : {}),
       ...(ports !== undefined ? { ports } : {}),
       ...(removeMissingPorts !== undefined ? { removeMissingPorts } : {}),
     });
