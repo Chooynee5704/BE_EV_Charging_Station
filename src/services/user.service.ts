@@ -1,6 +1,6 @@
-﻿import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { User } from '../models/user.model';
+﻿import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { User } from "../models/user.model";
 
 type PartialAddress =
   | {
@@ -56,10 +56,10 @@ const phoneRegex = /^(\+?[0-9]{1,3})?0?[1-9][0-9]{7,10}$/;
 
 function parseDob(dob?: string | Date | null): Date | undefined | null {
   if (dob === null) return null;
-  if (dob === undefined || dob === '') return undefined;
+  if (dob === undefined || dob === "") return undefined;
   const d = new Date(dob as any);
   if (Number.isNaN(d.getTime())) {
-    const err = new Error('Invalid dob format. Use ISO `YYYY-MM-DD`');
+    const err = new Error("Invalid dob format. Use ISO `YYYY-MM-DD`");
     (err as any).status = 400;
     throw err;
   }
@@ -69,11 +69,12 @@ function parseDob(dob?: string | Date | null): Date | undefined | null {
 function normalizeAddress(addr: PartialAddress | null) {
   if (addr === null) return null;
   if (!addr) return undefined;
-  if (typeof addr === 'string') {
+  if (typeof addr === "string") {
     const v = addr.trim();
     return v ? { line1: v } : undefined;
-    }
-  const { line1, line2, ward, district, city, province, country, postalCode } = addr;
+  }
+  const { line1, line2, ward, district, city, province, country, postalCode } =
+    addr;
   const cleaned: any = {};
   if (line1) cleaned.line1 = String(line1).trim();
   if (line2) cleaned.line2 = String(line2).trim();
@@ -86,14 +87,12 @@ function normalizeAddress(addr: PartialAddress | null) {
   return Object.keys(cleaned).length ? cleaned : undefined;
 }
 
-function validateNewPassword(newPassword: string, oldPasswordHash?: string): void {
+function validateNewPassword(newPassword: string): void {
   if (newPassword.length < 8) {
-    const err = new Error('newPassword must be at least 8 characters');
+    const err = new Error("newPassword must be at least 8 characters");
     (err as any).status = 400;
     throw err;
   }
-  // Optionally block same-as-old: compare after hashing? We'll compare plaintext by checking bcrypt after fetch.
-  // Complexity rules (optional): add as needed.
 }
 
 export async function createUser(input: CreateUserInput) {
@@ -106,14 +105,20 @@ export async function createUser(input: CreateUserInput) {
   const address = normalizeAddress(input.address ?? undefined);
 
   if (!username || !password || !email || !fullName) {
-    const err = new Error('username, password, email, fullName are required');
+    const err = new Error("username, password, email, fullName are required");
     (err as any).status = 400;
     throw err;
   }
 
-  const existing = await User.findOne({ $or: [{ username }, { email }] }).lean();
+  const existing = await User.findOne({
+    $or: [{ username }, { email }],
+  }).lean();
   if (existing) {
-    const err = new Error(existing.username === username ? 'Username already exists' : 'Email already exists');
+    const err = new Error(
+      existing.username === username
+        ? "Username already exists"
+        : "Email already exists"
+    );
     (err as any).status = 409;
     throw err;
   }
@@ -125,7 +130,7 @@ export async function createUser(input: CreateUserInput) {
     username,
     email,
     password: hashed,
-    role: 'user',
+    role: "user",
     profile: {
       fullName,
       ...(dob !== undefined ? { dob } : {}),
@@ -144,13 +149,13 @@ export async function updateUserProfile(input: UpdateProfileInput) {
   if (input.username !== undefined) {
     const username = input.username.trim();
     if (username.length < 3 || username.length > 50) {
-      const err = new Error('username must be 3-50 characters');
+      const err = new Error("username must be 3-50 characters");
       (err as any).status = 400;
       throw err;
     }
     const exists = await User.exists({ _id: { $ne: userId }, username });
     if (exists) {
-      const err = new Error('Username already exists');
+      const err = new Error("Username already exists");
       (err as any).status = 409;
       throw err;
     }
@@ -160,13 +165,13 @@ export async function updateUserProfile(input: UpdateProfileInput) {
   if (input.email !== undefined) {
     const email = input.email.trim().toLowerCase();
     if (!emailRegex.test(email)) {
-      const err = new Error('Invalid email format');
+      const err = new Error("Invalid email format");
       (err as any).status = 400;
       throw err;
     }
     const exists = await User.exists({ _id: { $ne: userId }, email });
     if (exists) {
-      const err = new Error('Email already exists');
+      const err = new Error("Email already exists");
       (err as any).status = 409;
       throw err;
     }
@@ -175,41 +180,41 @@ export async function updateUserProfile(input: UpdateProfileInput) {
 
   if (input.phone !== undefined) {
     if (input.phone === null) {
-      unsetOps.phone = '';
+      unsetOps.phone = "";
     } else {
       const phone = input.phone.trim();
       if (phone && !phoneRegex.test(phone)) {
-        const err = new Error('Invalid phone format');
+        const err = new Error("Invalid phone format");
         (err as any).status = 400;
         throw err;
       }
       if (phone) setOps.phone = phone;
-      else unsetOps.phone = '';
+      else unsetOps.phone = "";
     }
   }
 
   if (input.fullName !== undefined) {
     const fullName = input.fullName.trim();
-    setOps['profile.fullName'] = fullName;
+    setOps["profile.fullName"] = fullName;
   }
 
   if (input.dob !== undefined) {
     const dob = parseDob(input.dob);
     if (dob === null) {
-      unsetOps['profile.dob'] = '';
+      unsetOps["profile.dob"] = "";
     } else if (dob !== undefined) {
-      setOps['profile.dob'] = dob;
+      setOps["profile.dob"] = dob;
     }
   }
 
   if (input.address !== undefined) {
     const address = normalizeAddress(input.address);
     if (address === null) {
-      unsetOps['profile.address'] = '';
+      unsetOps["profile.address"] = "";
     } else if (address !== undefined) {
-      setOps['profile.address'] = address;
+      setOps["profile.address"] = address;
     } else {
-      unsetOps['profile.address'] = '';
+      unsetOps["profile.address"] = "";
     }
   }
 
@@ -217,7 +222,7 @@ export async function updateUserProfile(input: UpdateProfileInput) {
   if (Object.keys(setOps).length) updateDoc.$set = setOps;
   if (Object.keys(unsetOps).length) updateDoc.$unset = unsetOps;
   if (!Object.keys(updateDoc).length) {
-    const err = new Error('No fields to update');
+    const err = new Error("No fields to update");
     (err as any).status = 400;
     throw err;
   }
@@ -228,7 +233,7 @@ export async function updateUserProfile(input: UpdateProfileInput) {
   });
 
   if (!updated) {
-    const err = new Error('User not found');
+    const err = new Error("User not found");
     (err as any).status = 404;
     throw err;
   }
@@ -241,20 +246,20 @@ export async function changePassword(input: ChangePasswordInput) {
 
   const user = await User.findById(userId);
   if (!user) {
-    const err = new Error('User not found');
+    const err = new Error("User not found");
     (err as any).status = 404;
     throw err;
   }
 
   if (!user.password) {
-    const err = new Error('Password not set');
+    const err = new Error("Password not set");
     (err as any).status = 400;
     throw err;
   }
 
   const match = await bcrypt.compare(oldPassword, user.password);
   if (!match) {
-    const err = new Error('Old password is incorrect');
+    const err = new Error("Old password is incorrect");
     (err as any).status = 401;
     throw err;
   }
@@ -264,7 +269,7 @@ export async function changePassword(input: ChangePasswordInput) {
   // Block same-as-old
   const sameAsOld = await bcrypt.compare(newPassword, user.password);
   if (sameAsOld) {
-    const err = new Error('New password must be different from old password');
+    const err = new Error("New password must be different from old password");
     (err as any).status = 400;
     throw err;
   }
@@ -275,7 +280,7 @@ export async function changePassword(input: ChangePasswordInput) {
   user.password = newHash;
   await user.save();
 
-  return user.toJSON(); // toJSON will strip password
+  return user.toJSON(); // toJSON strips password
 }
 
 export async function getAllUsers() {
@@ -288,23 +293,23 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
 
   const user = await User.findOne({ username });
   if (!user) {
-    const err = new Error('Invalid username or password');
+    const err = new Error("Invalid username or password");
     (err as any).status = 401;
     throw err;
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
-    const err = new Error('Invalid username or password');
+    const err = new Error("Invalid username or password");
     (err as any).status = 401;
     throw err;
   }
 
-  const jwtSecret = process.env.JWT_SECRET || 'your-secret-key';
+  const jwtSecret = process.env.JWT_SECRET || "your-secret-key";
 
   let role = user.role;
   if (!role) {
-    user.role = 'user';
+    user.role = "user";
     await user.save();
     role = user.role;
   }
@@ -312,7 +317,7 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
   const token = jwt.sign(
     { userId: (user._id as any).toString(), username: user.username, role },
     jwtSecret,
-    { expiresIn: '24h' }
+    { expiresIn: "24h" }
   );
 
   return { user: user.toJSON(), token };

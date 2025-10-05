@@ -7,6 +7,8 @@ export interface IChargingStation extends Document {
   longitude: number;
   latitude: number;
   status: ChargingStationStatus;
+  address?: string;
+  provider?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,11 +25,15 @@ const ChargingStationSchema: Schema<IChargingStation> =
         default: "active",
         required: true,
       },
+      // NEW FIELDS
+      address: { type: String, trim: true },
+      provider: { type: String, trim: true },
     },
     { timestamps: true }
   );
 
 ChargingStationSchema.index({ name: 1 });
+ChargingStationSchema.index({ provider: 1 });
 ChargingStationSchema.index({ longitude: 1, latitude: 1 });
 
 ChargingStationSchema.virtual("ports", {

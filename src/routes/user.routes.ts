@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+﻿import { Router } from "express";
 import {
   createUserController,
   getAllUsersController,
@@ -6,17 +6,28 @@ import {
   getUserProfileController,
   updateUserProfileController,
   changePasswordController,
-} from '../controllers/user.controller';
-import { authenticateToken, authorizeRoles } from '../middleware/auth.middleware';
+} from "../controllers/user.controller";
+import {
+  authenticateToken,
+  authorizeRoles,
+} from "../middleware/auth.middleware";
 import {
   forgotPasswordController,
   resetPasswordController,
   verifyResetTokenController,
   verifyResetOtpController,
-} from '../controllers/passwordReset.controller';
+} from "../controllers/passwordReset.controller";
 
 const router = Router();
 
+/**
+ * @swagger
+ * tags:
+ *   - name: Authentication
+ *   - name: Users
+ */
+
+router.post("/create", createUserController);
 /**
  * @swagger
  * /users/create:
@@ -60,16 +71,15 @@ const router = Router();
  *       409: { description: Username or Email already exists }
  *       500: { description: Server error }
  */
-router.post('/create', createUserController);
 
+router.post("/login", loginController);
 /**
  * @swagger
  * /users/login:
  *   post:
  *     tags: [Authentication]
  *     summary: Login
- *     description: |
- *       Authenticates a user with **username** and **password** and returns a JWT token.
+ *     description: Authenticates a user with **username** and **password** and returns a JWT token.
  *     requestBody:
  *       required: true
  *       content:
@@ -86,24 +96,32 @@ router.post('/create', createUserController);
  *       401: { description: Invalid credentials }
  *       500: { description: Server error }
  */
-router.post('/login', loginController);
 
+router.get(
+  "/profile",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  getUserProfileController
+);
 /**
  * @swagger
  * /users/profile:
  *   get:
  *     tags: [Users]
  *     summary: Get the authenticated user profile
- *     description: 'Requires JWT token. Roles allowed: admin, staff, user.'
  *     security: [ { bearerAuth: [] } ]
  *     responses:
- *       200:
- *         description: Profile retrieved
+ *       200: { description: Profile retrieved }
  *       401: { description: Unauthorized }
  *       500: { description: Server error }
  */
-router.get('/profile', authenticateToken, authorizeRoles('admin', 'staff', 'user'), getUserProfileController);
 
+router.put(
+  "/profile",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  updateUserProfileController
+);
 /**
  * @swagger
  * /users/profile:
@@ -150,18 +168,19 @@ router.get('/profile', authenticateToken, authorizeRoles('admin', 'staff', 'user
  *       409: { description: Conflict (username/email already exists) }
  *       500: { description: Server error }
  */
-router.put('/profile', authenticateToken, authorizeRoles('admin', 'staff', 'user'), updateUserProfileController);
 
+router.put(
+  "/password",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  changePasswordController
+);
 /**
  * @swagger
  * /users/password:
  *   put:
  *     tags: [Users]
  *     summary: Change password (self)
- *     description: |
- *       Requires JWT token. Roles allowed: admin, staff, user.
- *       - Yêu cầu oldPassword và newPassword.
- *       - newPassword tối thiểu 8 ký tự và phải khác mật khẩu cũ.
  *     security: [ { bearerAuth: [] } ]
  *     requestBody:
  *       required: true
@@ -181,15 +200,19 @@ router.put('/profile', authenticateToken, authorizeRoles('admin', 'staff', 'user
  *       404: { description: User not found }
  *       500: { description: Server error }
  */
-router.put('/password', authenticateToken, authorizeRoles('admin', 'staff', 'user'), changePasswordController);
 
+router.get(
+  "/get-all",
+  authenticateToken,
+  authorizeRoles("admin"),
+  getAllUsersController
+);
 /**
  * @swagger
  * /users/get-all:
  *   get:
  *     tags: [Users]
  *     summary: List all users (admin only)
- *     description: Requires JWT token with admin role.
  *     security: [ { bearerAuth: [] } ]
  *     responses:
  *       200: { description: OK }
@@ -197,9 +220,8 @@ router.put('/password', authenticateToken, authorizeRoles('admin', 'staff', 'use
  *       403: { description: Forbidden (not admin) }
  *       500: { description: Server error }
  */
-router.get('/get-all', authenticateToken, authorizeRoles('admin'), getAllUsersController);
 
-router.post('/password/forgot', forgotPasswordController);
+router.post("/password/forgot", forgotPasswordController);
 /**
  * @swagger
  * /users/password/forgot:
@@ -222,7 +244,7 @@ router.post('/password/forgot', forgotPasswordController);
  *       500: { description: Server error }
  */
 
-router.get('/password/verify', verifyResetTokenController);
+router.get("/password/verify", verifyResetTokenController);
 /**
  * @swagger
  * /users/password/verify:
@@ -243,7 +265,7 @@ router.get('/password/verify', verifyResetTokenController);
  *       400: { description: Invalid/expired token }
  */
 
-router.get('/password/otp/verify', verifyResetOtpController);
+router.get("/password/otp/verify", verifyResetOtpController);
 /**
  * @swagger
  * /users/password/otp/verify:
@@ -264,7 +286,7 @@ router.get('/password/otp/verify', verifyResetOtpController);
  *       400: { description: Invalid/expired otp }
  */
 
-router.post('/password/reset', resetPasswordController);
+router.post("/password/reset", resetPasswordController);
 /**
  * @swagger
  * /users/password/reset:
@@ -294,4 +316,3 @@ router.post('/password/reset', resetPasswordController);
  */
 
 export default router;
-

@@ -1,6 +1,6 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from "mongoose";
 
-export type UserRole = 'user' | 'admin' | 'staff';
+export type UserRole = "user" | "admin" | "staff";
 
 export interface IAddress {
   line1?: string;
@@ -24,9 +24,9 @@ export interface IUser extends Document {
     dob?: Date;
     address?: IAddress;
   };
-  // 🔽 thêm 2 trường cho reset password
-  resetPasswordToken?: string | null;   // sha256(token)
-  resetPasswordExpires?: Date | null;   // thời điểm hết hạn
+  // reset password
+  resetPasswordToken?: string | null; // sha256(token)
+  resetPasswordExpires?: Date | null; // expiry time
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,15 +55,16 @@ const UserSchema: Schema<IUser> = new Schema<IUser>(
       trim: true,
       validate: {
         validator: (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
-        message: 'Email không hợp lệ',
+        message: "Email không hợp lệ",
       },
     },
     phone: {
       type: String,
       trim: true,
       validate: {
-        validator: (v: string) => !v || /^(\+?[0-9]{1,3})?0?[1-9][0-9]{7,10}$/.test(v),
-        message: 'Số điện thoại không hợp lệ',
+        validator: (v: string) =>
+          !v || /^(\+?[0-9]{1,3})?0?[1-9][0-9]{7,10}$/.test(v),
+        message: "Số điện thoại không hợp lệ",
       },
     },
     username: {
@@ -74,22 +75,19 @@ const UserSchema: Schema<IUser> = new Schema<IUser>(
       minlength: 3,
       maxlength: 50,
     },
-    password: {
-      type: String,
-      required: true,
-    },
+    password: { type: String, required: true },
     role: {
       type: String,
       required: true,
-      enum: ['user', 'admin', 'staff'],
-      default: 'user',
+      enum: ["user", "admin", "staff"],
+      default: "user",
     },
     profile: {
       fullName: { type: String, trim: true },
       dob: { type: Date },
       address: { type: AddressSchema, default: undefined },
     },
-    // 🔽 fields reset password
+    // reset password
     resetPasswordToken: { type: String, default: null, index: true },
     resetPasswordExpires: { type: Date, default: null },
   },
@@ -99,16 +97,25 @@ const UserSchema: Schema<IUser> = new Schema<IUser>(
 UserSchema.index({ email: 1 });
 UserSchema.index({ username: 1 });
 
-UserSchema.set('toJSON', {
+// 👇 virtual: 1 user -> many vehicles
+UserSchema.virtual("vehicles", {
+  ref: "Vehicle",
+  localField: "_id",
+  foreignField: "owner",
+  justOne: false,
+});
+
+UserSchema.set("toJSON", {
+  virtuals: true, // 👈 include virtuals
   transform: (_doc: any, ret: any) => {
     (ret as any).id = ret._id;
-    Reflect.deleteProperty(ret, '_id');
-    Reflect.deleteProperty(ret, '__v');
-    Reflect.deleteProperty(ret, 'password');
-    Reflect.deleteProperty(ret, 'resetPasswordToken');
-    Reflect.deleteProperty(ret, 'resetPasswordExpires');
+    Reflect.deleteProperty(ret, "_id");
+    Reflect.deleteProperty(ret, "__v");
+    Reflect.deleteProperty(ret, "password");
+    Reflect.deleteProperty(ret, "resetPasswordToken");
+    Reflect.deleteProperty(ret, "resetPasswordExpires");
     return ret;
   },
 });
 
-export const User: Model<IUser> = mongoose.model<IUser>('User', UserSchema);
+export const User: Model<IUser> = mongoose.model<IUser>("User", UserSchema);

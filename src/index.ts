@@ -9,6 +9,8 @@ import userRoutes from "./routes/user.routes";
 import stationRoutes from "./routes/chargingstation.routes";
 import { specs } from "./config/swagger";
 import { User } from "./models/user.model";
+import reservationRoutes from "./routes/reservation.routes";
+import vehicleRoutes from "./routes/vehicle.routes";
 
 dotenv.config();
 
@@ -21,6 +23,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://ev-charging-management-latest.onrender.com",
+  "https://private-eve-evchargingstation-7d82d2a9.koyeb.app",
   process.env.FRONTEND_URL || "",
 ].filter(Boolean);
 
@@ -59,6 +62,8 @@ app.use(
 // Routes
 app.use("/users", userRoutes);
 app.use("/stations", stationRoutes);
+app.use("/reservations", reservationRoutes);
+app.use("/vehicles", vehicleRoutes);
 
 /**
  * Seed default admin & staff if not exists

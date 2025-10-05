@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+﻿import { Request, Response } from "express";
 import {
   createUser,
   getAllUsers,
@@ -6,9 +6,9 @@ import {
   CreateUserInput,
   updateUserProfile,
   changePassword,
-} from '../services/user.service';
-import { AuthenticatedRequest } from '../types';
-import { User } from '../models/user.model';
+} from "../services/user.service";
+import { AuthenticatedRequest } from "../types";
+import { User } from "../models/user.model";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,20 +24,26 @@ export async function createUserController(req: Request, res: Response) {
     };
 
     if (
-      !username || !password || !email || !fullName ||
-      typeof username !== 'string' ||
-      typeof password !== 'string' ||
-      typeof email !== 'string' ||
-      typeof fullName !== 'string'
+      !username ||
+      !password ||
+      !email ||
+      !fullName ||
+      typeof username !== "string" ||
+      typeof password !== "string" ||
+      typeof email !== "string" ||
+      typeof fullName !== "string"
     ) {
       return res.status(400).json({
-        error: 'InvalidInput',
-        message: 'username, password, email, fullName are required and must be strings',
+        error: "InvalidInput",
+        message:
+          "username, password, email, fullName are required and must be strings",
       });
     }
 
     if (!emailRegex.test(email.trim().toLowerCase())) {
-      return res.status(400).json({ error: 'InvalidInput', message: 'Invalid email format' });
+      return res
+        .status(400)
+        .json({ error: "InvalidInput", message: "Invalid email format" });
     }
 
     const payload: CreateUserInput = {
@@ -53,8 +59,10 @@ export async function createUserController(req: Request, res: Response) {
     return res.status(201).json(user);
   } catch (error: any) {
     const status = error?.status || 500;
-    const message = error?.message || 'Internal Server Error';
-    return res.status(status).json({ error: status === 409 ? 'Conflict' : 'ServerError', message });
+    const message = error?.message || "Internal Server Error";
+    return res
+      .status(status)
+      .json({ error: status === 409 ? "Conflict" : "ServerError", message });
   }
 }
 
@@ -64,54 +72,80 @@ export async function getAllUsersController(_req: Request, res: Response) {
     return res.status(200).json(users);
   } catch (error: any) {
     const status = error?.status || 500;
-    const message = error?.message || 'Internal Server Error';
-    return res.status(status).json({ error: 'ServerError', message });
+    const message = error?.message || "Internal Server Error";
+    return res.status(status).json({ error: "ServerError", message });
   }
 }
 
 export async function loginController(req: Request, res: Response) {
   try {
-    const { username, password } = req.body as { username?: string; password?: string };
+    const { username, password } = req.body as {
+      username?: string;
+      password?: string;
+    };
 
-    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: 'InvalidInput', message: 'username and password are required' });
+    if (
+      !username ||
+      !password ||
+      typeof username !== "string" ||
+      typeof password !== "string"
+    ) {
+      return res
+        .status(400)
+        .json({
+          error: "InvalidInput",
+          message: "username and password are required",
+        });
     }
 
     if (username.trim().length === 0 || password.length === 0) {
       return res.status(400).json({
-        error: 'InvalidInput',
-        message: 'username and password must not be empty',
+        error: "InvalidInput",
+        message: "username and password must not be empty",
       });
     }
 
     const result = await loginUser({ username: username.trim(), password });
-    return res.status(200).json({ success: true, message: 'Login successful', data: result });
+    return res
+      .status(200)
+      .json({ success: true, message: "Login successful", data: result });
   } catch (error: any) {
     const status = error?.status || 500;
-    const message = error?.message || 'Server error';
+    const message = error?.message || "Server error";
     return res.status(status).json({
       success: false,
-      error: status === 401 ? 'Unauthorized' : 'ServerError',
+      error: status === 401 ? "Unauthorized" : "ServerError",
       message,
     });
   }
 }
 
-export async function getUserProfileController(req: AuthenticatedRequest, res: Response) {
+export async function getUserProfileController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
   try {
     if (!req.user?.userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized', message: 'User not authenticated' });
+      return res
+        .status(401)
+        .json({
+          success: false,
+          error: "Unauthorized",
+          message: "User not authenticated",
+        });
     }
 
     const user = await User.findById(req.user.userId).lean();
     if (!user) {
-      return res.status(404).json({ success: false, error: 'NotFound', message: 'User not found' });
+      return res
+        .status(404)
+        .json({ success: false, error: "NotFound", message: "User not found" });
     }
 
     const profile = user.profile ?? {};
     return res.status(200).json({
       success: true,
-      message: 'Profile retrieved',
+      message: "Profile retrieved",
       data: {
         userId: user._id.toString(),
         username: user.username,
@@ -124,15 +158,30 @@ export async function getUserProfileController(req: AuthenticatedRequest, res: R
       },
     });
   } catch (error: any) {
-    console.error('Get profile error:', error);
-    return res.status(500).json({ success: false, error: 'ServerError', message: 'Unexpected server error' });
+    console.error("Get profile error:", error);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        error: "ServerError",
+        message: "Unexpected server error",
+      });
   }
 }
 
-export async function updateUserProfileController(req: AuthenticatedRequest, res: Response) {
+export async function updateUserProfileController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
   try {
     if (!req.user?.userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized', message: 'User not authenticated' });
+      return res
+        .status(401)
+        .json({
+          success: false,
+          error: "Unauthorized",
+          message: "User not authenticated",
+        });
     }
 
     const { username, email, phone, fullName, dob, address } = req.body as {
@@ -146,35 +195,51 @@ export async function updateUserProfileController(req: AuthenticatedRequest, res
 
     const input: any = { userId: req.user.userId };
     if (username !== undefined) input.username = username;
-    if (email !== undefined)    input.email = email;
-    if (phone !== undefined)    input.phone = phone;
+    if (email !== undefined) input.email = email;
+    if (phone !== undefined) input.phone = phone;
     if (fullName !== undefined) input.fullName = fullName;
-    if (dob !== undefined)      input.dob = dob;
-    if (address !== undefined)  input.address = address;
+    if (dob !== undefined) input.dob = dob;
+    if (address !== undefined) input.address = address;
 
     const updated = await updateUserProfile(input);
 
     return res.status(200).json({
       success: true,
-      message: 'Profile updated',
+      message: "Profile updated",
       data: updated,
     });
   } catch (error: any) {
-    console.error('Update profile error:', error);
+    console.error("Update profile error:", error);
     const status = error?.status || 500;
-    const message = error?.message || 'Unexpected server error';
+    const message = error?.message || "Unexpected server error";
     return res.status(status).json({
       success: false,
-      error: status === 409 ? 'Conflict' : status === 404 ? 'NotFound' : status === 400 ? 'InvalidInput' : 'ServerError',
+      error:
+        status === 409
+          ? "Conflict"
+          : status === 404
+          ? "NotFound"
+          : status === 400
+          ? "InvalidInput"
+          : "ServerError",
       message,
     });
   }
 }
 
-export async function changePasswordController(req: AuthenticatedRequest, res: Response) {
+export async function changePasswordController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
   try {
     if (!req.user?.userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized', message: 'User not authenticated' });
+      return res
+        .status(401)
+        .json({
+          success: false,
+          error: "Unauthorized",
+          message: "User not authenticated",
+        });
     }
 
     const { oldPassword, newPassword, confirmNewPassword } = req.body as {
@@ -184,14 +249,31 @@ export async function changePasswordController(req: AuthenticatedRequest, res: R
     };
 
     if (
-      !oldPassword || !newPassword ||
-      typeof oldPassword !== 'string' || typeof newPassword !== 'string'
+      !oldPassword ||
+      !newPassword ||
+      typeof oldPassword !== "string" ||
+      typeof newPassword !== "string"
     ) {
-      return res.status(400).json({ success: false, error: 'InvalidInput', message: 'oldPassword and newPassword are required' });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "InvalidInput",
+          message: "oldPassword and newPassword are required",
+        });
     }
 
-    if (confirmNewPassword !== undefined && confirmNewPassword !== newPassword) {
-      return res.status(400).json({ success: false, error: 'InvalidInput', message: 'confirmNewPassword does not match' });
+    if (
+      confirmNewPassword !== undefined &&
+      confirmNewPassword !== newPassword
+    ) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "InvalidInput",
+          message: "confirmNewPassword does not match",
+        });
     }
 
     const updated = await changePassword({
@@ -202,16 +284,23 @@ export async function changePasswordController(req: AuthenticatedRequest, res: R
 
     return res.status(200).json({
       success: true,
-      message: 'Password changed',
+      message: "Password changed",
       data: updated, // user.toJSON() (không chứa password)
     });
   } catch (error: any) {
-    console.error('Change password error:', error);
+    console.error("Change password error:", error);
     const status = error?.status || 500;
-    const message = error?.message || 'Unexpected server error';
+    const message = error?.message || "Unexpected server error";
     return res.status(status).json({
       success: false,
-      error: status === 401 ? 'Unauthorized' : status === 404 ? 'NotFound' : status === 400 ? 'InvalidInput' : 'ServerError',
+      error:
+        status === 401
+          ? "Unauthorized"
+          : status === 404
+          ? "NotFound"
+          : status === 400
+          ? "InvalidInput"
+          : "ServerError",
       message,
     });
   }
