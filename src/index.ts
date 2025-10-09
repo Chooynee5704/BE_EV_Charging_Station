@@ -19,38 +19,72 @@ dotenv.config();
 const app: Express = express();
 const port = process.env.PORT || 3000;
 
+// Koyeb / proxies
 app.set("trust proxy", 1);
 
-const allowedOrigins = [
+// -------- CORS SETUP (đã fix trailing slash & preflight) ----------
+const normalizeOrigin = (o?: string | null) =>
+  (o || "").trim().replace(/\/+$/, ""); // bỏ dấu '/' cuối nếu có
+
+// NOTE: KHÔNG để dấu '/' cuối trong allowedOrigins
+const allowedOriginsRaw = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://private-eve-evchargingstation-7d82d2a9.koyeb.app",
-  "https://fe-ev-charging-station.vercel.app/",
+  "https://fe-ev-charging-station.vercel.app",
   process.env.FRONTEND_URL || "",
 ].filter(Boolean);
 
+const allowedOrigins = allowedOriginsRaw.map(normalizeOrigin);
+
+// Cho phép thêm wildcard cùng domain nếu cần (VD: preview.vercel.app)
+// Ví dụ: const extraOk = [/^https:\/\/.*\.vercel\.app$/];
+
 const corsOptions: cors.CorsOptions = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
+    const nOrigin = normalizeOrigin(origin);
+    // Cho phép khi:
+    // - Request server-to-server (no origin)
+    // - Origin nằm trong danh sách cho phép
+    const okList = !nOrigin || allowedOrigins.includes(nOrigin); /* ||
+      extraOk.some((re) => re.test(nOrigin)) */
+
+    if (okList) return cb(null, true);
+
+    console.warn(`[CORS] Blocked origin: ${origin}`);
     return cb(new Error(`CORS blocked for origin: ${origin}`));
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true, // nếu FE dùng cookie/Authorization
   maxAge: 600,
 };
 
+// Đảm bảo Vary: Origin để CDN/proxy cache đúng theo Origin
+app.use((req, res, next) => {
+  res.setHeader("Vary", "Origin");
+  next();
+});
+
+// Helmet: tắt CSP nếu bạn render Swagger/FE khác origin
 app.use(
   helmet({
     contentSecurityPolicy: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   })
 );
+
+// Middleware CORS (chính)
 app.use(cors(corsOptions));
+
+// Đảm bảo trả preflight OPTIONS sớm, tránh lọt xuống routes
 app.options("*", cors(corsOptions));
+
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ---------------- SWAGGER ----------------
 app.use(
   "/api-docs",
   swaggerUi.serve,
@@ -61,7 +95,7 @@ app.use(
   })
 );
 
-// Routes
+// ---------------- ROUTES ----------------
 app.use("/users", userRoutes);
 app.use("/stations", stationRoutes);
 app.use("/reservations", reservationRoutes);
@@ -69,9 +103,7 @@ app.use("/vehicles", vehicleRoutes);
 app.use("/pricing", pricingRoutes);
 app.use("/vnpay", vnpayRoutes);
 
-/**
- * Seed default admin & staff if not exists
- */
+// ---------------- SEED DEFAULT USERS ----------------
 async function seedDefaultUsers() {
   try {
     const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
@@ -121,6 +153,7 @@ async function seedDefaultUsers() {
   }
 }
 
+// ---------------- SYSTEM ENDPOINTS ----------------
 /**
  * @swagger
  * /health:
@@ -148,6 +181,7 @@ app.get("/", (_req: Request, res: Response) => {
   res.status(200).json({
     message: "Welcome to Node.js Backend API",
     version: "1.0.0",
+    frontend_allowed: allowedOrigins,
     endpoints: {
       health: "/health",
       documentation: "/api-docs",
@@ -182,7 +216,7 @@ app.get("/", (_req: Request, res: Response) => {
   });
 });
 
-// 404 handler
+// ---------------- 404 HANDLER ----------------
 app.use("*", (req: Request, res: Response) => {
   res.status(404).json({
     error: "Route not found",
@@ -190,7 +224,7 @@ app.use("*", (req: Request, res: Response) => {
   });
 });
 
-// Error handling middleware
+// ---------------- ERROR HANDLER ----------------
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Error:", err?.message || err);
   const message =
@@ -200,7 +234,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal Server Error", message });
 });
 
-// Start server
+// ---------------- START SERVER ----------------
 const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
@@ -210,6 +244,7 @@ const startServer = async (): Promise<void> => {
       console.log(`Health check: http://localhost:${port}/health`);
       console.log(`Docs: http://localhost:${port}/api-docs`);
       console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`[CORS allowlist]`, allowedOrigins);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
