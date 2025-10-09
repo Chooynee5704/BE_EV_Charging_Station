@@ -1,4 +1,3 @@
-// src/routes/chargingstation.routes.ts
 import { Router } from "express";
 import {
   // Stations
@@ -6,7 +5,7 @@ import {
   listChargingStationsController,
   getChargingStationByIdController,
   updateChargingStationController,
-  deleteChargingStationController,
+  deleteChargingStationController, // soft delete
   // Ports (refactored)
   createPortController,
   getPortByIdController,
@@ -40,7 +39,7 @@ const router = Router(); // mounted at app.use("/stations", router)
 /**
  * @swagger
  * components:
- *   schemas: 
+ *   schemas:
  *     ChargingPortCreate:
  *       type: object
  *       required: [type, powerKw, speed, price]
@@ -249,7 +248,8 @@ router.put(
  * /stations/{id}:
  *   delete:
  *     tags: [ChargingStations]
- *     summary: Delete charging station (blocked if station still has ports)
+ *     summary: Soft delete a charging station (mark as inactive)
+ *     description: Set `status = inactive`. Data is kept; ports remain unchanged.
  *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: path
@@ -257,10 +257,9 @@ router.put(
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: Deleted }
+ *       200: { description: Marked as inactive }
  *       401: { description: Unauthorized }
  *       404: { description: Not found }
- *       409: { description: Conflict — station has charging ports }
  */
 router.delete(
   "/:id",
@@ -457,6 +456,7 @@ router.post(
   authorizeRoles("admin", "staff"),
   addSlotToPortController
 );
+
 // 👉 Fix: export cả default lẫn named để mọi cấu hình TS đều ok
 export { router as stationRoutes };
 export default router;

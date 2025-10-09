@@ -24,8 +24,8 @@ const ChargingStationSchema: Schema<IChargingStation> =
         enum: ["active", "inactive", "maintenance"],
         default: "active",
         required: true,
+        index: true,
       },
-      // NEW FIELDS
       address: { type: String, trim: true },
       provider: { type: String, trim: true },
     },

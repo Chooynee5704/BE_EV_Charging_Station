@@ -52,7 +52,7 @@ export interface ListStationsOptions {
 
 export type PortCreateInput = {
   type: PortType;
-  status?: PortStatus;
+  status?: PortStatus | "inactive"; // allow inactive for cascade
   powerKw: number;
   speed: ChargeSpeed;
   price: number;
@@ -63,9 +63,9 @@ export type PortUpdateInput = Partial<PortCreateInput>;
 
 /* --------- Slots --------- */
 export type SlotCreateInput = {
-  order?: number; // integer >= 1; if missing, auto-assign next order
-  status?: ChargingSlotStatus; // default: 'available'
-  nextAvailableAt?: Date | null; // default: null (forced null when status is 'available')
+  order?: number;
+  status?: ChargingSlotStatus | "inactive"; // allow inactive for cascade
+  nextAvailableAt?: Date | null;
 };
 export type SlotUpdateInput = Partial<SlotCreateInput>;
 
@@ -106,12 +106,12 @@ function sanitizePortsCreate(ports?: PortCreateInput[]): PortCreateInput[] {
   }
   return ports.map((p, idx) => {
     const { type, status, powerKw, speed, price } = p;
-    if (!type || !["DC", "Ultra", "AC"].includes(type)) {
+    if (!type || !["AC", "DC", "Ultra"].includes(type)) {
       const e: any = new Error(`ports[${idx}].type invalid`);
       e.status = 400;
       throw e;
     }
-    if (status && !["available", "in_use"].includes(status)) {
+    if (status && !["available", "in_use", "inactive"].includes(status)) {
       const e: any = new Error(`ports[${idx}].status invalid`);
       e.status = 400;
       throw e;
@@ -156,12 +156,12 @@ function sanitizePortsUpsert(ports?: PortUpsertInput[]): PortUpsertInput[] {
         throw e;
       }
     }
-    if (!type || !["DC", "Ultra", "AC"].includes(type)) {
+    if (!type || !["AC", "DC", "Ultra"].includes(type)) {
       const e: any = new Error(`ports[${idx}].type invalid`);
       e.status = 400;
       throw e;
     }
-    if (status && !["available", "in_use"].includes(status)) {
+    if (status && !["available", "in_use", "inactive"].includes(status)) {
       const e: any = new Error(`ports[${idx}].status invalid`);
       e.status = 400;
       throw e;
@@ -345,9 +345,13 @@ export async function updateStation(input: UpdateStationInput) {
   if (latitude !== undefined) setOps.latitude = latitude;
   if (status !== undefined) setOps.status = status;
   if (address !== undefined)
-    setOps.address = address ? String(address).trim() : undefined;
+    setOps.address =
+      address === null || address === "" ? undefined : String(address).trim();
   if (provider !== undefined)
-    setOps.provider = provider ? String(provider).trim() : undefined;
+    setOps.provider =
+      provider === null || provider === ""
+        ? undefined
+        : String(provider).trim();
 
   const portsSan = ports ? sanitizePortsUpsert(ports) : [];
   const session = await mongoose.startSession();
@@ -440,27 +444,63 @@ export async function updateStation(input: UpdateStationInput) {
   }
 }
 
+/**
+ * Soft delete + cascade:
+ * - Station.status = "inactive"
+ * - All Ports of station: status = "inactive"
+ * - All Slots under those Ports: status = "inactive", nextAvailableAt = null
+ * - Idempotent
+ */
 export async function deleteStation(id: string) {
   ensureValidObjectId(id, "id");
 
-  const portsCount = await ChargingPort.countDocuments({ station: id });
-  if (portsCount > 0) {
-    const e: any = new Error("Station has charging ports. Delete ports first.");
-    e.status = 409;
-    throw e;
-  }
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const station = await ChargingStation.findById(id).session(session);
+      if (!station) {
+        const e: any = new Error("Charging station not found");
+        e.status = 404;
+        throw e;
+      }
 
-  const deleted = await ChargingStation.findByIdAndDelete(id);
-  if (!deleted) {
-    const e: any = new Error("Charging station not found");
-    e.status = 404;
-    throw e;
-  }
+      // 1) Mark station inactive
+      if (station.status !== "inactive") {
+        station.status = "inactive";
+        await station.save({ session });
+      }
 
-  return deleted.toJSON();
+      // 2) Get all port ids via DISTINCT (fix TS casting issue)
+      const portIds = (await ChargingPort.distinct("_id", {
+        station: id,
+      }).session(session)) as unknown as Types.ObjectId[];
+
+      // 3) Cascade ports -> inactive
+      await ChargingPort.updateMany(
+        { station: id, status: { $ne: "inactive" } },
+        { $set: { status: "inactive" } },
+        { session }
+      );
+
+      // 4) Cascade slots -> inactive + clear nextAvailableAt
+      if (portIds.length > 0) {
+        await ChargingSlot.updateMany(
+          { port: { $in: portIds }, status: { $ne: "inactive" } },
+          { $set: { status: "inactive", nextAvailableAt: null } },
+          { session }
+        );
+      }
+    });
+
+    // Return latest station with ports (now inactive)
+    const doc = await ChargingStation.findById(id).populate("ports").exec();
+    return doc!.toJSON();
+  } finally {
+    session.endSession();
+  }
 }
 
-/* ============== Port operations (REFAC) ============== */
+/* ============== Port operations ============== */
 
 function validatePortPayload(
   p: PortCreateInput | PortUpdateInput,
@@ -469,7 +509,7 @@ function validatePortPayload(
   if (
     "type" in p &&
     p.type !== undefined &&
-    !["DC", "Ultra", "AC"].includes(p.type as any)
+    !["AC", "DC", "Ultra"].includes(p.type as any)
   ) {
     const e: any = new Error(`${path}.type invalid`);
     e.status = 400;
@@ -478,7 +518,7 @@ function validatePortPayload(
   if (
     "status" in p &&
     p.status !== undefined &&
-    !["available", "in_use"].includes(p.status as any)
+    !["available", "in_use", "inactive"].includes(p.status as any)
   ) {
     const e: any = new Error(`${path}.status invalid`);
     e.status = 400;
@@ -511,7 +551,6 @@ function validatePortPayload(
     e.status = 400;
     throw e;
   }
-
   if (
     !("type" in p) &&
     !("status" in p) &&
@@ -587,20 +626,16 @@ export async function updatePort(portId: string, patch: PortUpdateInput) {
 
 export async function deletePort(portId: string) {
   ensureValidObjectId(portId, "portId");
-
-  const deleted = await ChargingPort.findOneAndDelete({
-    _id: portId,
-  });
+  const deleted = await ChargingPort.findOneAndDelete({ _id: portId });
   if (!deleted) {
     const e: any = new Error("Port not found");
     e.status = 404;
     throw e;
   }
-
   return deleted.toJSON();
 }
 
-/* ============== Slot operations (REFAC with `order`) ============== */
+/* ============== Slot operations (with `order`) ============== */
 
 function isPositiveInt(n: any) {
   return typeof n === "number" && Number.isInteger(n) && n >= 1;
@@ -613,7 +648,7 @@ function validateSlotPayload(
   if (
     "status" in p &&
     p.status !== undefined &&
-    !["available", "booked", "in_use"].includes(p.status as any)
+    !["available", "booked", "in_use", "inactive"].includes(p.status as any)
   ) {
     const e: any = new Error(`${path}.status invalid`);
     e.status = 400;
@@ -641,7 +676,6 @@ async function ensurePortExists(portId: string) {
   return port;
 }
 
-// List all slots of a port
 export async function listSlotsByPort(portId: string) {
   ensureValidObjectId(portId, "portId");
   await ensurePortExists(portId);
@@ -653,7 +687,6 @@ export async function listSlotsByPort(portId: string) {
   return slots.map((s) => s.toJSON());
 }
 
-// Get single slot by id
 export async function getSlotById(slotId: string) {
   ensureValidObjectId(slotId, "slotId");
 
@@ -666,7 +699,6 @@ export async function getSlotById(slotId: string) {
   return slot.toJSON();
 }
 
-// Create slot in a port
 export async function addSlotToPort(portId: string, payload: SlotCreateInput) {
   ensureValidObjectId(portId, "portId");
   validateSlotPayload(payload, "slot");
@@ -674,9 +706,11 @@ export async function addSlotToPort(portId: string, payload: SlotCreateInput) {
 
   const finalStatus = payload.status ?? "available";
   const finalNextAvailableAt =
-    finalStatus === "available" ? null : payload.nextAvailableAt ?? null;
+    finalStatus === "available" || finalStatus === "inactive"
+      ? null
+      : payload.nextAvailableAt ?? null;
 
-  // Determine order: use provided, or auto-assign next
+  // Determine order: provided or auto-assign next
   let finalOrder: number;
   if (payload.order !== undefined) {
     finalOrder = payload.order;
@@ -708,7 +742,6 @@ export async function addSlotToPort(portId: string, payload: SlotCreateInput) {
   }
 }
 
-// Update a slot by id
 export async function updateSlot(slotId: string, patch: SlotUpdateInput) {
   ensureValidObjectId(slotId, "slotId");
   validateSlotPayload(patch, "slot");
@@ -725,12 +758,10 @@ export async function updateSlot(slotId: string, patch: SlotUpdateInput) {
 
   if (patch.order !== undefined) setOps.order = patch.order;
   if (patch.status !== undefined) setOps.status = patch.status;
-
-  if (patch.nextAvailableAt !== undefined) {
+  if (patch.nextAvailableAt !== undefined)
     setOps.nextAvailableAt = patch.nextAvailableAt;
-  }
 
-  if (targetStatus === "available") {
+  if (targetStatus === "available" || targetStatus === "inactive") {
     setOps.nextAvailableAt = null;
   }
 
@@ -756,7 +787,6 @@ export async function updateSlot(slotId: string, patch: SlotUpdateInput) {
   }
 }
 
-// Delete a slot by id
 export async function deleteSlot(slotId: string) {
   ensureValidObjectId(slotId, "slotId");
 
