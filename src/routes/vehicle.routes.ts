@@ -37,7 +37,7 @@ const router = Router();
  *         vin: { type: string, example: "WVWAA71K08W201030" }
  *         type: { type: string, enum: [car, motorbike, scooter, truck, other], example: car }
  *         batteryCapacityKwh: { type: number, example: 82 }
- *         connectorType: { type: string, example: "CCS" }
+ *         connectorType: { type: string, example: "DC" }
  *         status: { type: string, enum: [active, inactive], example: active }
  *     VehicleUpdate:
  *       type: object

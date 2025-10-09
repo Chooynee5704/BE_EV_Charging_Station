@@ -11,6 +11,8 @@ import { specs } from "./config/swagger";
 import { User } from "./models/user.model";
 import reservationRoutes from "./routes/reservation.routes";
 import vehicleRoutes from "./routes/vehicle.routes";
+import pricingRoutes from "./routes/pricing.routes";
+import vnpayRoutes from "./routes/vnpay.routes";
 
 dotenv.config();
 
@@ -22,8 +24,8 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
-  "https://ev-charging-management-latest.onrender.com",
   "https://private-eve-evchargingstation-7d82d2a9.koyeb.app",
+  "https://fe-ev-charging-station.vercel.app/",
   process.env.FRONTEND_URL || "",
 ].filter(Boolean);
 
@@ -64,6 +66,8 @@ app.use("/users", userRoutes);
 app.use("/stations", stationRoutes);
 app.use("/reservations", reservationRoutes);
 app.use("/vehicles", vehicleRoutes);
+app.use("/pricing", pricingRoutes);
+app.use("/vnpay", vnpayRoutes);
 
 /**
  * Seed default admin & staff if not exists
