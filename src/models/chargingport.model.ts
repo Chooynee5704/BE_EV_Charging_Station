@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model, Types } from "mongoose";
 
-export type PortType = "CCS" | "CHAdeMO" | "AC";
+export type PortType = "AC" | "DC" | "Ultra";
 export type PortStatus = "available" | "in_use";
 export type ChargeSpeed = "fast" | "slow";
 
@@ -23,7 +23,7 @@ const ChargingPortSchema: Schema<IChargingPort> = new Schema<IChargingPort>(
       required: true,
       index: true,
     },
-    type: { type: String, enum: ["CCS", "CHAdeMO", "AC"], required: true },
+    type: { type: String, enum: ["AC", "DC", "Ultra"], required: true },
     status: {
       type: String,
       enum: ["available", "in_use"],

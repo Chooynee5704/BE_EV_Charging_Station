@@ -13,7 +13,7 @@ export interface IVehicle {
   vin?: string; // Số VIN (optional)
   type?: VehicleType; // Loại xe
   batteryCapacityKwh?: number; // (optional)
-  connectorType?: string; // ví dụ: CCS, CHAdeMO, Type2,...
+  connectorType?: string; // ví dụ: DC, Ultra, Type2,...
   status: VehicleStatus; // active/inactive
   createdAt: Date;
   updatedAt: Date;

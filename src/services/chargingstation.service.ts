@@ -106,7 +106,7 @@ function sanitizePortsCreate(ports?: PortCreateInput[]): PortCreateInput[] {
   }
   return ports.map((p, idx) => {
     const { type, status, powerKw, speed, price } = p;
-    if (!type || !["CCS", "CHAdeMO", "AC"].includes(type)) {
+    if (!type || !["DC", "Ultra", "AC"].includes(type)) {
       const e: any = new Error(`ports[${idx}].type invalid`);
       e.status = 400;
       throw e;
@@ -156,7 +156,7 @@ function sanitizePortsUpsert(ports?: PortUpsertInput[]): PortUpsertInput[] {
         throw e;
       }
     }
-    if (!type || !["CCS", "CHAdeMO", "AC"].includes(type)) {
+    if (!type || !["DC", "Ultra", "AC"].includes(type)) {
       const e: any = new Error(`ports[${idx}].type invalid`);
       e.status = 400;
       throw e;
@@ -469,7 +469,7 @@ function validatePortPayload(
   if (
     "type" in p &&
     p.type !== undefined &&
-    !["CCS", "CHAdeMO", "AC"].includes(p.type as any)
+    !["DC", "Ultra", "AC"].includes(p.type as any)
   ) {
     const e: any = new Error(`${path}.type invalid`);
     e.status = 400;

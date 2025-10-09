@@ -40,12 +40,12 @@ const router = Router(); // mounted at app.use("/stations", router)
 /**
  * @swagger
  * components:
- *   schemas:
+ *   schemas: 
  *     ChargingPortCreate:
  *       type: object
  *       required: [type, powerKw, speed, price]
  *       properties:
- *         type: { type: string, enum: [CCS, CHAdeMO, AC] }
+ *         type: { type: string, enum: [DC, Ultra, AC] }
  *         status: { type: string, enum: [available, in_use], default: available }
  *         powerKw: { type: number, example: 60 }
  *         speed: { type: string, enum: [fast, slow] }
@@ -62,7 +62,7 @@ const router = Router(); // mounted at app.use("/stations", router)
  *     ChargingPortUpdate:
  *       type: object
  *       properties:
- *         type: { type: string, enum: [CCS, CHAdeMO, AC] }
+ *         type: { type: string, enum: [DC, Ultra, AC] }
  *         status: { type: string, enum: [available, in_use] }
  *         powerKw: { type: number }
  *         speed: { type: string, enum: [fast, slow] }
