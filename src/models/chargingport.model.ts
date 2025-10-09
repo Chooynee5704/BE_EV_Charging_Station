@@ -1,7 +1,8 @@
 import mongoose, { Schema, Document, Model, Types } from "mongoose";
 
 export type PortType = "AC" | "DC" | "Ultra";
-export type PortStatus = "available" | "in_use";
+// thêm "inactive" để hỗ trợ soft delete
+export type PortStatus = "available" | "in_use" | "inactive";
 export type ChargeSpeed = "fast" | "slow";
 
 export interface IChargingPort extends Document {
@@ -26,7 +27,7 @@ const ChargingPortSchema: Schema<IChargingPort> = new Schema<IChargingPort>(
     type: { type: String, enum: ["AC", "DC", "Ultra"], required: true },
     status: {
       type: String,
-      enum: ["available", "in_use"],
+      enum: ["available", "in_use", "inactive"],
       default: "available",
       required: true,
       index: true,
@@ -41,7 +42,15 @@ const ChargingPortSchema: Schema<IChargingPort> = new Schema<IChargingPort>(
 ChargingPortSchema.index({ station: 1, type: 1 });
 ChargingPortSchema.index({ station: 1, status: 1 });
 
+ChargingPortSchema.virtual("slots", {
+  ref: "ChargingSlot",
+  localField: "_id",
+  foreignField: "port",
+  justOne: false,
+});
+
 ChargingPortSchema.set("toJSON", {
+  virtuals: true,
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id;
     delete ret._id;

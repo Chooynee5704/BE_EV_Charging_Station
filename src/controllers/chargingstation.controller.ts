@@ -4,10 +4,10 @@ import {
   getStationById,
   listStations,
   updateStation,
-  deleteStation,
+  deleteStation, // soft delete + cascade
   CreateStationInput,
   ListStationsOptions,
-  // Ports (refactored)
+  // Ports
   PortCreateInput,
   PortUpsertInput,
   PortUpdateInput,
@@ -15,7 +15,7 @@ import {
   updatePort,
   deletePort,
   getPortById,
-  // Slots (refactored)
+  // Slots
   SlotCreateInput,
   SlotUpdateInput,
   addSlotToPort,
@@ -27,7 +27,6 @@ import {
 
 /* =================== Station controllers =================== */
 
-// CREATE
 export async function createChargingStationController(
   req: Request,
   res: Response
@@ -78,7 +77,6 @@ export async function createChargingStationController(
   }
 }
 
-// LIST
 export async function listChargingStationsController(
   req: Request,
   res: Response
@@ -118,7 +116,6 @@ export async function listChargingStationsController(
   }
 }
 
-// GET BY ID
 export async function getChargingStationByIdController(
   req: Request,
   res: Response
@@ -145,7 +142,6 @@ export async function getChargingStationByIdController(
   }
 }
 
-// UPDATE
 export async function updateChargingStationController(
   req: Request,
   res: Response
@@ -213,18 +209,19 @@ export async function updateChargingStationController(
   }
 }
 
-// DELETE
+// DELETE (soft delete → cascade inactive)
 export async function deleteChargingStationController(
   req: Request,
   res: Response
 ) {
   try {
     const { id } = req.params as { id: string };
-    const deleted = await deleteStation(id);
+    const updated = await deleteStation(id);
     return res.status(200).json({
       success: true,
-      message: "Charging station deleted",
-      data: deleted,
+      message:
+        "Charging station and all related ports/slots marked as inactive",
+      data: updated,
     });
   } catch (error: any) {
     const status = error?.status || 500;
@@ -233,8 +230,6 @@ export async function deleteChargingStationController(
       error:
         status === 404
           ? "NotFound"
-          : status === 409
-          ? "Conflict"
           : status === 400
           ? "InvalidInput"
           : "ServerError",
@@ -243,9 +238,8 @@ export async function deleteChargingStationController(
   }
 }
 
-/* ============== Port controllers (REFAC) ============== */
+/* =================== Port controllers =================== */
 
-// POST /ports  (requires stationId in body)
 export async function createPortController(req: Request, res: Response) {
   try {
     const body = req.body as PortCreateInput & { stationId?: string };
@@ -265,7 +259,6 @@ export async function createPortController(req: Request, res: Response) {
   }
 }
 
-// GET /ports/:portId
 export async function getPortByIdController(req: Request, res: Response) {
   try {
     const { portId } = req.params as { portId: string };
@@ -280,7 +273,6 @@ export async function getPortByIdController(req: Request, res: Response) {
   }
 }
 
-// PUT /ports/:portId
 export async function updatePortController(req: Request, res: Response) {
   try {
     const { portId } = req.params as { portId: string };
@@ -301,7 +293,6 @@ export async function updatePortController(req: Request, res: Response) {
   }
 }
 
-// DELETE /ports/:portId
 export async function deletePortController(req: Request, res: Response) {
   try {
     const { portId } = req.params as { portId: string };
@@ -319,9 +310,8 @@ export async function deletePortController(req: Request, res: Response) {
   }
 }
 
-/* ============== Slot controllers (REFAC) ============== */
+/* =================== Slot controllers =================== */
 
-// GET /ports/:portId/slots
 export async function listSlotsByPortController(req: Request, res: Response) {
   try {
     const { portId } = req.params as { portId: string };
@@ -336,7 +326,6 @@ export async function listSlotsByPortController(req: Request, res: Response) {
   }
 }
 
-// GET /slots/:slotId
 export async function getSlotByIdController(req: Request, res: Response) {
   try {
     const { slotId } = req.params as { slotId: string };
@@ -351,7 +340,6 @@ export async function getSlotByIdController(req: Request, res: Response) {
   }
 }
 
-// POST /ports/:portId/slots
 export async function addSlotToPortController(req: Request, res: Response) {
   try {
     const { portId } = req.params as { portId: string };
@@ -374,7 +362,6 @@ export async function addSlotToPortController(req: Request, res: Response) {
   }
 }
 
-// PUT /slots/:slotId
 export async function updateSlotController(req: Request, res: Response) {
   try {
     const { slotId } = req.params as { slotId: string };
@@ -397,7 +384,6 @@ export async function updateSlotController(req: Request, res: Response) {
   }
 }
 
-// DELETE /slots/:slotId
 export async function deleteSlotController(req: Request, res: Response) {
   try {
     const { slotId } = req.params as { slotId: string };
