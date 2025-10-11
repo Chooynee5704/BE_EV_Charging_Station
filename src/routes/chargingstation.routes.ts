@@ -47,7 +47,7 @@ const router = Router(); // mounted at app.use("/stations", router)
  *         type: { type: string, enum: [DC, Ultra, AC] }
  *         status: { type: string, enum: [available, in_use], default: available }
  *         powerKw: { type: number, example: 60 }
- *         speed: { type: string, enum: [fast, slow] }
+ *         speed: { type: string, enum: [fast, slow, super_fast] }
  *         price: { type: number, example: 3500 }
  *     ChargingPortCreateWithStation:
  *       allOf:
@@ -64,7 +64,7 @@ const router = Router(); // mounted at app.use("/stations", router)
  *         type: { type: string, enum: [DC, Ultra, AC] }
  *         status: { type: string, enum: [available, in_use] }
  *         powerKw: { type: number }
- *         speed: { type: string, enum: [fast, slow] }
+ *         speed: { type: string, enum: [fast, slow, super_fast] }
  *         price: { type: number }
  *     ChargingSlotCreate:
  *       type: object

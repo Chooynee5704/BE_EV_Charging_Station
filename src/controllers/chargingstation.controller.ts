@@ -71,7 +71,12 @@ export async function createChargingStationController(
   } catch (error: any) {
     const status = error?.status || 500;
     return res.status(status).json({
-      error: status === 400 ? "InvalidInput" : "ServerError",
+      error:
+        status === 400
+          ? "InvalidInput"
+          : status === 409
+          ? "LimitExceeded"
+          : "ServerError",
       message: error?.message || "Internal Server Error",
     });
   }
