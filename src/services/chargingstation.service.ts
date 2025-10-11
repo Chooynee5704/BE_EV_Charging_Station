@@ -284,7 +284,7 @@ export async function listStations(opts: ListStationsOptions = {}) {
     address,
     provider,
     page = 1,
-    limit = 20,
+    limit = 120,
     includePorts = true,
   } = opts;
 
