@@ -155,7 +155,7 @@ router.post(
  *         schema: { type: integer, example: 1 }
  *       - in: query
  *         name: limit
- *         schema: { type: integer, example: 20 }
+ *         schema: { type: integer, example: 120 }
  *       - in: query
  *         name: includePorts
  *         schema: { type: boolean, example: true }
