@@ -3,7 +3,7 @@ import mongoose, { Schema, Document, Model, Types } from "mongoose";
 export type PortType = "AC" | "DC" | "Ultra";
 // thêm "inactive" để hỗ trợ soft delete
 export type PortStatus = "available" | "in_use" | "inactive";
-export type ChargeSpeed = "fast" | "slow";
+export type ChargeSpeed = "fast" | "slow" | "super_fast";
 
 export interface IChargingPort extends Document {
   station: Types.ObjectId;
@@ -33,7 +33,7 @@ const ChargingPortSchema: Schema<IChargingPort> = new Schema<IChargingPort>(
       index: true,
     },
     powerKw: { type: Number, required: true, min: 1 },
-    speed: { type: String, enum: ["fast", "slow"], required: true },
+    speed: { type: String, enum: ["fast", "slow", "super_fast"], required: true },
     price: { type: Number, required: true, min: 0 },
   },
   { timestamps: true }

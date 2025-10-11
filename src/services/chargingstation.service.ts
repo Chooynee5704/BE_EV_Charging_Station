@@ -16,6 +16,10 @@ import {
   ChargingSlotStatus,
 } from "../models/chargingslot.model";
 
+/* ======================= Limits ======================= */
+export const MAX_STATION_COUNT = 120; // total stations allowed in system
+export const MAX_PAGE_LIMIT = 120; // max items per page when listing
+
 /* ======================= Types ======================= */
 
 export interface CreateStationInput {
@@ -121,7 +125,7 @@ function sanitizePortsCreate(ports?: PortCreateInput[]): PortCreateInput[] {
       e.status = 400;
       throw e;
     }
-    if (!["fast", "slow"].includes(speed as any)) {
+    if (!["fast", "slow", "super_fast"].includes(speed as any)) {
       const e: any = new Error(`ports[${idx}].speed invalid`);
       e.status = 400;
       throw e;
@@ -171,7 +175,7 @@ function sanitizePortsUpsert(ports?: PortUpsertInput[]): PortUpsertInput[] {
       e.status = 400;
       throw e;
     }
-    if (!["fast", "slow"].includes(speed as any)) {
+    if (!["fast", "slow", "super_fast"].includes(speed as any)) {
       const e: any = new Error(`ports[${idx}].speed invalid`);
       e.status = 400;
       throw e;
@@ -211,6 +215,16 @@ export async function createStation(input: CreateStationInput) {
     throw e;
   }
   assertCoords(longitude, latitude);
+
+  // 🔒 Hard cap: total stations <= 120
+  const total = await ChargingStation.countDocuments({});
+  if (total >= MAX_STATION_COUNT) {
+    const e: any = new Error(
+      `Cannot create more stations: limit ${MAX_STATION_COUNT} reached`
+    );
+    e.status = 409;
+    throw e;
+  }
 
   const portsSan = sanitizePortsCreate(ports);
   const session = await mongoose.startSession();
@@ -280,7 +294,8 @@ export async function listStations(opts: ListStationsOptions = {}) {
   if (address) filter.address = { $regex: new RegExp(address.trim(), "i") };
   if (provider) filter.provider = { $regex: new RegExp(provider.trim(), "i") };
 
-  const safeLimit = Math.max(Number(limit) || 1, 1);
+  const rawLimit = Math.max(Number(limit) || 1, 1);
+  const safeLimit = Math.min(MAX_PAGE_LIMIT, rawLimit); // 🔒 cap at 120
   const safePage = Math.max(Number(page) || 1, 1);
   const skip = (safePage - 1) * safeLimit;
 
@@ -302,6 +317,7 @@ export async function listStations(opts: ListStationsOptions = {}) {
       limit: safeLimit,
       total,
       pages: Math.ceil(total / safeLimit),
+      maxLimit: MAX_PAGE_LIMIT,
     },
   };
 }
@@ -536,7 +552,7 @@ function validatePortPayload(
   if (
     "speed" in p &&
     p.speed !== undefined &&
-    !["fast", "slow"].includes(p.speed as any)
+    !["fast", "slow", "super_fast"].includes(p.speed as any)
   ) {
     const e: any = new Error(`${path}.speed invalid`);
     e.status = 400;

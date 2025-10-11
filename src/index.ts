@@ -13,6 +13,7 @@ import reservationRoutes from "./routes/reservation.routes";
 import vehicleRoutes from "./routes/vehicle.routes";
 import pricingRoutes from "./routes/pricing.routes";
 import vnpayRoutes from "./routes/vnpay.routes";
+import transactionRoutes from "./routes/transaction.routes";
 
 dotenv.config();
 
@@ -102,6 +103,7 @@ app.use("/reservations", reservationRoutes);
 app.use("/vehicles", vehicleRoutes);
 app.use("/pricing", pricingRoutes);
 app.use("/vnpay", vnpayRoutes);
+app.use("/transactions", transactionRoutes);
 
 // ---------------- SEED DEFAULT USERS ----------------
 async function seedDefaultUsers() {
@@ -211,6 +213,19 @@ app.get("/", (_req: Request, res: Response) => {
         getById: "GET /stations/slots/:slotId (admin, staff, user)",
         updateById: "PUT /stations/slots/:slotId (admin, staff)",
         deleteById: "DELETE /stations/slots/:slotId (admin)",
+      },
+      transactions: {
+        myHistory: "GET /transactions/my-history (Protected - user)",
+        myStats: "GET /transactions/my-stats (Protected - user)",
+        list: "GET /transactions (Protected - admin/staff xem tất cả, user xem của mình)",
+        getById: "GET /transactions/:id (Protected)",
+        create: "POST /transactions (admin, staff)",
+        stats: "GET /transactions/stats/:userId (admin, staff)",
+      },
+      vnpay: {
+        checkoutUrl: "POST /vnpay/checkout-url (Protected - tạo URL thanh toán)",
+        return: "GET /vnpay/return (callback từ VNPay)",
+        ipn: "GET /vnpay/ipn (webhook từ VNPay)",
       },
     },
   });
