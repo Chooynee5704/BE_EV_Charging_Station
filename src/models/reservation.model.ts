@@ -16,6 +16,8 @@ export interface IReservation extends Document {
   vehicle: Types.ObjectId; // ref -> Vehicle
   items: IReservationItem[];
   status: ReservationStatus;
+  qrCheck: boolean; // Đã check-in bằng QR chưa
+  qr?: string; // Base64 của QR code
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,6 +58,15 @@ const ReservationSchema: Schema<IReservation> = new Schema<IReservation>(
       default: "pending",
       required: true,
       index: true,
+    },
+    qrCheck: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    qr: {
+      type: String,
+      default: undefined,
     },
   },
   { timestamps: true }

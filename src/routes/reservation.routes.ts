@@ -8,6 +8,7 @@ import {
   listMyReservationsController,
   getReservationController,
   cancelReservationController,
+  qrCheckController,
 } from "../controllers/reservation.controller";
 
 const router = Router();
@@ -165,6 +166,72 @@ router.patch(
   authenticateToken,
   authorizeRoles("admin", "staff", "user"),
   cancelReservationController
+);
+
+/**
+ * @swagger
+ * /reservations/qr-check:
+ *   post:
+ *     tags: [Reservations]
+ *     summary: Check-in reservation using QR code (Staff/Admin only)
+ *     description: |
+ *       Staff hoặc Admin scan QR code để check-in reservation.
+ *       - Chỉ reservation có status = "confirmed" mới được check-in
+ *       - Nếu qrCheck = false và status = confirmed → update qrCheck = true, return success
+ *       - Nếu qrCheck = true → return "QR code đã được sử dụng"
+ *       - Nếu status ≠ confirmed → return "Reservation chưa thanh toán"
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reservationId]
+ *             properties:
+ *               reservationId:
+ *                 type: string
+ *                 description: ID của reservation cần check-in
+ *                 example: "670abc123def456ghi789jkl"
+ *     responses:
+ *       200:
+ *         description: Check-in thành công hoặc QR đã được sử dụng
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Check-in thành công"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     reservationId: { type: string }
+ *                     status: { type: string, example: "confirmed" }
+ *                     qrCheck: { type: boolean, example: true }
+ *                     checkedAt: { type: string, format: date-time }
+ *                     checkedBy:
+ *                       type: object
+ *                       properties:
+ *                         userId: { type: string }
+ *                         role: { type: string, example: "staff" }
+ *       400:
+ *         description: Reservation chưa thanh toán hoặc dữ liệu không hợp lệ
+ *       403:
+ *         description: Không có quyền (chỉ staff/admin)
+ *       404:
+ *         description: Không tìm thấy reservation
+ */
+router.post(
+  "/qr-check",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
+  qrCheckController
 );
 
 export default router;

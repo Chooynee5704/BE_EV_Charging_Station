@@ -8,6 +8,7 @@ import {
 } from "../services/reservation.service";
 import { AuthenticatedRequest } from "../types";
 import { Vehicle } from "../models/vehicle.model";
+import { Reservation } from "../models/reservation.model";
 
 export async function createReservationController(
   req: AuthenticatedRequest,
@@ -235,6 +236,103 @@ export async function cancelReservationController(
           : status === 400
           ? "InvalidInput"
           : "ServerError",
+      message,
+    });
+  }
+}
+
+/**
+ * QR Check Controller - Staff/Admin only
+ * Check reservation with QR code
+ */
+export async function qrCheckController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    // Chỉ staff và admin có thể dùng
+    if (req.user?.role !== "staff" && req.user?.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Chỉ staff và admin có thể sử dụng chức năng này",
+      });
+    }
+
+    const reservationId = req.body.reservationId || req.query.reservationId;
+
+    if (!reservationId) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "reservationId là bắt buộc",
+      });
+    }
+
+    // Tìm reservation
+    const reservation = await Reservation.findById(reservationId);
+
+    if (!reservation) {
+      return res.status(404).json({
+        success: false,
+        error: "NotFound",
+        message: "Không tìm thấy reservation",
+      });
+    }
+
+    // Kiểm tra status
+    if (reservation.status !== "confirmed") {
+      return res.status(400).json({
+        success: false,
+        error: "PaymentRequired",
+        message: "Reservation chưa thanh toán",
+        data: {
+          reservationId: String(reservation._id),
+          status: reservation.status,
+          qrCheck: reservation.qrCheck,
+        },
+      });
+    }
+
+    // Kiểm tra qrCheck
+    if (reservation.qrCheck) {
+      return res.status(200).json({
+        success: false,
+        error: "AlreadyUsed",
+        message: "QR code đã được sử dụng",
+        data: {
+          reservationId: String(reservation._id),
+          status: reservation.status,
+          qrCheck: reservation.qrCheck,
+        },
+      });
+    }
+
+    // Update qrCheck = true
+    reservation.qrCheck = true;
+    await reservation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Check-in thành công",
+      data: {
+        reservationId: String(reservation._id),
+        status: reservation.status,
+        qrCheck: reservation.qrCheck,
+        checkedAt: new Date().toISOString(),
+        checkedBy: {
+          userId: req.user.userId,
+          role: req.user.role,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("QR check error:", error);
+    const status = error?.status || 500;
+    const message = error?.message || "Lỗi khi kiểm tra QR code";
+    return res.status(status).json({
+      success: false,
+      error: "ServerError",
       message,
     });
   }

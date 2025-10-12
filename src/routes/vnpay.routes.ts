@@ -25,7 +25,19 @@ const router = Router();
  * /vnpay/checkout-url:
  *   post:
  *     tags: [VNPay]
- *     summary: Tạo URL thanh toán VNPay (signed)
+ *     summary: Tạo URL thanh toán VNPay (User chọn ngân hàng trên VNPay)
+ *     description: |
+ *       Tạo URL thanh toán VNPay. User sẽ được redirect đến trang VNPay 
+ *       để chọn ngân hàng và phương thức thanh toán.
+ *       
+ *       **Các ngân hàng/phương thức có sẵn trên VNPay:**
+ *       - ATM Card (Thẻ nội địa)
+ *       - Internet Banking
+ *       - Ví điện tử VNPay
+ *       - QR Code
+ *       - Visa/Mastercard/JCB
+ *       
+ *       User sẽ tự chọn trên trang VNPay, không cần chọn trước.
  *     security: [ { bearerAuth: [] } ]
  *     requestBody:
  *       required: true
@@ -35,15 +47,45 @@ const router = Router();
  *             type: object
  *             required: [amount, orderInfo]
  *             properties:
- *               amount: { type: number, example: 27716, description: "Số tiền VND (sẽ *100 khi gửi lên VNPay)" }
- *               orderInfo: { type: string, example: "Thanh toan dat lich/hoa don #123" }
- *               orderId: { type: string, example: "ORDER-123" }
- *               bankCode: { type: string, example: "VNBANK" }
- *               locale: { type: string, enum: [vn, en], example: vn }
- *               orderType: { type: string, example: other }
+ *               amount:
+ *                 type: number
+ *                 example: 27716
+ *                 description: "Số tiền VND (sẽ *100 khi gửi lên VNPay)"
+ *               orderInfo:
+ *                 type: string
+ *                 example: "Thanh toan dat lich/hoa don #123"
+ *                 description: "Thông tin đơn hàng hiển thị trên VNPay"
+ *               reservationId:
+ *                 type: string
+ *                 example: "60d5ec49f1b2c72b8c8e4f1a"
+ *                 description: "ID của reservation - sẽ được dùng làm vnp_TxnRef"
+ *               locale:
+ *                 type: string
+ *                 enum: [vn, en]
+ *                 example: vn
+ *                 description: "Ngôn ngữ hiển thị trên VNPay (mặc định: vn)"
  *     responses:
- *       200: { description: OK }
- *       400: { description: InvalidInput }
+ *       200:
+ *         description: Tạo URL thanh toán thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     paymentUrl:
+ *                       type: string
+ *                       description: URL để redirect user đến trang thanh toán VNPay
+ *       400:
+ *         description: Dữ liệu không hợp lệ
+ *       401:
+ *         description: Chưa đăng nhập
  */
 router.post(
   "/checkout-url",
@@ -60,7 +102,8 @@ router.post(
  *     summary: Kiểm tra trạng thái thanh toán từ VNPay return URL
  *     description: |
  *       API để kiểm tra trạng thái thanh toán dựa trên thông tin từ VNPay return URL.
- *       Trả về trạng thái rõ ràng: success, failed, cancelled
+ *       Trả về trạng thái rõ ràng: success, failed, cancelled.
+ *       Tự động cập nhật transaction và reservation status.
  *     requestBody:
  *       required: true
  *       content:
@@ -68,6 +111,10 @@ router.post(
  *           schema:
  *             type: object
  *             properties:
+ *               reservationId:
+ *                 type: string
+ *                 description: ID của reservation cần cập nhật (optional)
+ *                 example: "60d5ec49f1b2c72b8c8e4f1a"
  *               vnp_Amount:
  *                 type: string
  *                 example: "2771600"
