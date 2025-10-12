@@ -12,6 +12,8 @@ import {
   findTransactionByVnpTxnRef,
   updateTransaction,
 } from "../services/transaction.service";
+import { Reservation } from "../models/reservation.model";
+import { activateSubscription } from "../services/subscription.service";
 
 function getClientIp(req: AuthenticatedRequest) {
   const xf = (req.headers["x-forwarded-for"] as string) || "";
@@ -67,7 +69,7 @@ export async function createVnpayCheckoutUrlController(
   res: Response
 ) {
   try {
-    const { amount, orderInfo, orderId, bankCode, locale, orderType, reservationId } =
+    const { amount, orderInfo, orderId, locale, orderType, reservationId } =
       req.body as Partial<BuildCheckoutInput> & { 
         amount?: number | string;
         reservationId?: string;
@@ -91,13 +93,17 @@ export async function createVnpayCheckoutUrlController(
       });
     }
 
-    // Tip: in sandbox, omit bankCode or use "NCB"
+    // Ưu tiên dùng reservationId làm orderId (vnp_TxnRef)
+    // Nếu không có thì dùng orderId, nếu cũng không có thì VNPay service sẽ tự tạo
+    const finalOrderId = reservationId || orderId;
+    
+    // KHÔNG cho phép chọn bankCode - user sẽ chọn trên trang VNPay
     const payload: BuildCheckoutInput = {
       amount: amountNum,
       orderInfo: String(orderInfo),
       ipAddr: getClientIp(req),
-      ...(orderId ? { orderId: String(orderId) } : {}),
-      ...(bankCode ? { bankCode: String(bankCode) } : {}),
+      ...(finalOrderId ? { orderId: String(finalOrderId) } : {}),
+      // bankCode bị loại bỏ - user chọn trên VNPay
       ...(locale ? { locale: locale as "vn" | "en" } : {}),
       ...(orderType ? { orderType: String(orderType) } : {}),
     };
@@ -122,11 +128,13 @@ export async function createVnpayCheckoutUrlController(
         metadata: {
           ipAddr: getClientIp(req),
           createdFrom: "checkout_url",
+          ...(reservationId ? { reservationId } : {}),
         },
       };
       
-      if (reservationId) {
-        txnInput.reservationId = reservationId;
+      // Lưu reservationId vào transaction nếu có
+      if (reservationId || finalOrderId) {
+        txnInput.reservationId = reservationId || finalOrderId;
       }
 
       await createTransaction(txnInput);
@@ -183,6 +191,19 @@ export async function vnpayReturnController(
             ...(failureReason ? { failureReason } : {}),
           },
         });
+
+        // Nếu thanh toán thành công và là subscription payment -> activate subscription
+        if (newStatus === "success" && existingTransaction.metadata?.paymentType === "subscription") {
+          const subscriptionId = existingTransaction.metadata.subscriptionId;
+          if (subscriptionId) {
+            try {
+              await activateSubscription(subscriptionId);
+              console.log(`Activated subscription ${subscriptionId} after successful payment`);
+            } catch (activateErr) {
+              console.error(`Failed to activate subscription ${subscriptionId}:`, activateErr);
+            }
+          }
+        }
       }
     }
   } catch (updateErr) {
@@ -208,8 +229,11 @@ export async function checkPaymentStatusController(
   res: Response
 ) {
   try {
+    // Lấy reservationId từ body (nếu có)
+    const { reservationId, ...vnpayData } = req.body;
+    
     // Có thể nhận từ body hoặc query
-    const queryData = req.method === "POST" ? req.body : req.query;
+    const queryData = Object.keys(vnpayData).length > 0 ? vnpayData : req.query;
     
     if (!queryData || Object.keys(queryData).length === 0) {
       return res.status(400).json({
@@ -297,19 +321,56 @@ export async function checkPaymentStatusController(
           },
         });
 
-        // Cập nhật reservation status nếu có
+        // Cập nhật reservation status nếu có (từ transaction)
         if (updatedTransaction.reservation) {
           const Reservation = require("../models/reservation.model").Reservation;
-          const reservationId = updatedTransaction.reservation;
+          const { generateQRCodeBase64, generateQRCheckUrl } = require("../utils/qrcode.util");
+          const resId = updatedTransaction.reservation;
           
           try {
+            // Success → confirmed, Failed/Cancelled → pending (giữ nguyên để user có thể thử lại)
             const newReservationStatus = paymentStatus === "success" ? "confirmed" : "pending";
-            await Reservation.findByIdAndUpdate(reservationId, {
-              status: newReservationStatus,
-            });
-            console.log(`Updated reservation ${reservationId} status to ${newReservationStatus}`);
+            const updateData: any = { status: newReservationStatus };
+            
+            // Tạo QR code nếu payment success
+            if (paymentStatus === "success") {
+              const qrCheckUrl = generateQRCheckUrl(String(resId));
+              const qrCodeBase64 = await generateQRCodeBase64(qrCheckUrl);
+              updateData.qr = qrCodeBase64;
+              console.log(`Generated QR code for reservation ${resId}`);
+            }
+            
+            await Reservation.findByIdAndUpdate(resId, updateData);
+            console.log(`Updated reservation ${resId} status to ${newReservationStatus} (payment: ${paymentStatus})`);
           } catch (resErr) {
             console.error("Failed to update reservation status:", resErr);
+          }
+        }
+        
+        // Cập nhật reservation status nếu có (từ request body)
+        if (reservationId && reservationId !== updatedTransaction.reservation?.toString()) {
+          const Reservation = require("../models/reservation.model").Reservation;
+          const { generateQRCodeBase64, generateQRCheckUrl } = require("../utils/qrcode.util");
+          const Types = require("mongoose").Types;
+          
+          try {
+            if (Types.ObjectId.isValid(reservationId)) {
+              const newReservationStatus = paymentStatus === "success" ? "confirmed" : "pending";
+              const updateData: any = { status: newReservationStatus };
+              
+              // Tạo QR code nếu payment success
+              if (paymentStatus === "success") {
+                const qrCheckUrl = generateQRCheckUrl(reservationId);
+                const qrCodeBase64 = await generateQRCodeBase64(qrCheckUrl);
+                updateData.qr = qrCodeBase64;
+                console.log(`Generated QR code for reservation ${reservationId}`);
+              }
+              
+              await Reservation.findByIdAndUpdate(reservationId, updateData);
+              console.log(`Updated reservation ${reservationId} status to ${newReservationStatus} (payment: ${paymentStatus})`);
+            }
+          } catch (resErr) {
+            console.error("Failed to update reservation status from request:", resErr);
           }
         }
 
@@ -449,12 +510,34 @@ export async function vnpayIpnController(
       },
     });
 
-    // TODO: Nếu thanh toán thành công, cập nhật trạng thái reservation nếu có
-    if (newStatus === "success" && existingTransaction.reservation) {
-      // Có thể cập nhật reservation status ở đây
-      console.log(
-        `Payment success for reservation: ${existingTransaction.reservation}`
-      );
+    // Nếu thanh toán thành công
+    if (newStatus === "success") {
+      // 1. Cập nhật trạng thái reservation nếu có
+      if (existingTransaction.reservation) {
+        try {
+          await Reservation.findByIdAndUpdate(existingTransaction.reservation, {
+            status: "confirmed",
+          });
+          console.log(
+            `Payment success for reservation: ${existingTransaction.reservation}`
+          );
+        } catch (resErr) {
+          console.error("Failed to update reservation:", resErr);
+        }
+      }
+
+      // 2. Activate subscription nếu là subscription payment
+      if (existingTransaction.metadata?.paymentType === "subscription") {
+        const subscriptionId = existingTransaction.metadata.subscriptionId;
+        if (subscriptionId) {
+          try {
+            await activateSubscription(subscriptionId);
+            console.log(`Activated subscription ${subscriptionId} after successful payment (IPN)`);
+          } catch (activateErr) {
+            console.error(`Failed to activate subscription ${subscriptionId}:`, activateErr);
+          }
+        }
+      }
     }
 
     return res.json({ RspCode: "00", Message: "Confirm Success" });

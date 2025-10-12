@@ -9,11 +9,14 @@ import userRoutes from "./routes/user.routes";
 import stationRoutes from "./routes/chargingstation.routes";
 import { specs } from "./config/swagger";
 import { User } from "./models/user.model";
+import { seedDefaultSubscriptionPlans } from "./services/subscriptionPlan.service";
 import reservationRoutes from "./routes/reservation.routes";
 import vehicleRoutes from "./routes/vehicle.routes";
 import pricingRoutes from "./routes/pricing.routes";
 import vnpayRoutes from "./routes/vnpay.routes";
 import transactionRoutes from "./routes/transaction.routes";
+import subscriptionRoutes from "./routes/subscription.routes";
+import subscriptionPlanRoutes from "./routes/subscriptionPlan.routes";
 
 dotenv.config();
 
@@ -104,6 +107,8 @@ app.use("/vehicles", vehicleRoutes);
 app.use("/pricing", pricingRoutes);
 app.use("/vnpay", vnpayRoutes);
 app.use("/transactions", transactionRoutes);
+app.use("/subscriptions", subscriptionRoutes);
+app.use("/subscription-plans", subscriptionPlanRoutes);
 
 // ---------------- SEED DEFAULT USERS ----------------
 async function seedDefaultUsers() {
@@ -226,6 +231,28 @@ app.get("/", (_req: Request, res: Response) => {
         checkoutUrl: "POST /vnpay/checkout-url (Protected - tạo URL thanh toán)",
         return: "GET /vnpay/return (callback từ VNPay)",
         ipn: "GET /vnpay/ipn (webhook từ VNPay)",
+        checkPaymentStatus: "POST /vnpay/check-payment-status (kiểm tra trạng thái thanh toán)",
+      },
+      subscriptionPlans: {
+        list: "GET /subscription-plans (danh sách gói: basic, standard, premium)",
+        getById: "GET /subscription-plans/:id (chi tiết gói)",
+        create: "POST /subscription-plans (admin - tạo gói mới)",
+        update: "PUT /subscription-plans/:id (admin - cập nhật gói)",
+        delete: "DELETE /subscription-plans/:id (admin - xóa gói)",
+      },
+      subscriptions: {
+        create: "POST /subscriptions (admin - tạo subscription bằng planId)",
+        payment: "POST /subscriptions/payment (Protected - tạo subscription + payment URL bằng planId)",
+        checkPayment: "POST /subscriptions/check-payment-status (Protected - kiểm tra trạng thái thanh toán)",
+        list: "GET /subscriptions (Protected - tất cả user có thể xem)",
+        mySubscriptions: "GET /subscriptions/my-subscriptions (Protected - xem subscriptions của mình)",
+        currentActive: "GET /subscriptions/current-active (Protected - xem subscription đang hoạt động)",
+        getById: "GET /subscriptions/:id (Protected)",
+        update: "PUT /subscriptions/:id (admin - cập nhật subscription)",
+        delete: "DELETE /subscriptions/:id (admin - xóa subscription)",
+        upgrade: "POST /subscriptions/upgrade (Protected - nâng cấp bằng planId)",
+        cancel: "POST /subscriptions/:id/cancel (Protected - hủy subscription)",
+        activate: "POST /subscriptions/:id/activate (admin - kích hoạt subscription)",
       },
     },
   });
@@ -254,6 +281,7 @@ const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
     await seedDefaultUsers();
+    await seedDefaultSubscriptionPlans();
     app.listen(port, () => {
       console.log(`Server is running on port ${port}`);
       console.log(`Health check: http://localhost:${port}/health`);
