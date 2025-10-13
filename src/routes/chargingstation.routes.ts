@@ -135,8 +135,7 @@ router.post(
  * /stations:
  *   get:
  *     tags: [ChargingStations]
- *     summary: List charging stations (filter/pagination, ports populated by default)
- *     security: [ { bearerAuth: [] } ]
+ *     summary: List charging stations (filter/pagination, ports populated by default) - Public access
  *     parameters:
  *       - in: query
  *         name: status
@@ -161,12 +160,9 @@ router.post(
  *         schema: { type: boolean, example: true }
  *     responses:
  *       200: { description: OK }
- *       401: { description: Unauthorized }
  */
 router.get(
   "/",
-  authenticateToken,
-  authorizeRoles("admin", "staff", "user"),
   listChargingStationsController
 );
 
@@ -175,8 +171,7 @@ router.get(
  * /stations/{id}:
  *   get:
  *     tags: [ChargingStations]
- *     summary: Get charging station by id (ports populated by default)
- *     security: [ { bearerAuth: [] } ]
+ *     summary: Get charging station by id (ports populated by default) - Public access
  *     parameters:
  *       - in: path
  *         name: id
@@ -187,13 +182,10 @@ router.get(
  *         schema: { type: boolean, example: true }
  *     responses:
  *       200: { description: OK }
- *       401: { description: Unauthorized }
  *       404: { description: Not found }
  */
 router.get(
   "/:id",
-  authenticateToken,
-  authorizeRoles("admin", "staff", "user"),
   getChargingStationByIdController
 );
 
@@ -301,8 +293,7 @@ router.post(
  * /stations/ports/{portId}:
  *   get:
  *     tags: [ChargingPorts]
- *     summary: Get a specific charging port
- *     security: [ { bearerAuth: [] } ]
+ *     summary: Get a specific charging port - Public access
  *     parameters:
  *       - in: path
  *         name: portId
@@ -310,13 +301,10 @@ router.post(
  *         schema: { type: string }
  *     responses:
  *       200: { description: OK }
- *       401: { description: Unauthorized }
  *       404: { description: Not found }
  */
 router.get(
   "/ports/:portId",
-  authenticateToken,
-  authorizeRoles("admin", "staff", "user"),
   getPortByIdController
 );
 
@@ -382,8 +370,7 @@ router.delete(
  * /stations/ports/{portId}/slots:
  *   get:
  *     tags: [ChargingSlots]
- *     summary: List charging slots for a specific port
- *     security: [ { bearerAuth: [] } ]
+ *     summary: List charging slots for a specific port - Public access
  *     parameters:
  *       - in: path
  *         name: portId
@@ -391,13 +378,10 @@ router.delete(
  *         schema: { type: string }
  *     responses:
  *       200: { description: OK }
- *       401: { description: Unauthorized }
  *       404: { description: Port not found }
  */
 router.get(
   "/ports/:portId/slots",
-  authenticateToken,
-  authorizeRoles("admin", "staff", "user"),
   listSlotsByPortController
 );
 
@@ -406,8 +390,7 @@ router.get(
  * /stations/slots/{slotId}:
  *   get:
  *     tags: [ChargingSlots]
- *     summary: Get a specific charging slot by id
- *     security: [ { bearerAuth: [] } ]
+ *     summary: Get a specific charging slot by id - Public access
  *     parameters:
  *       - in: path
  *         name: slotId
@@ -415,13 +398,10 @@ router.get(
  *         schema: { type: string }
  *     responses:
  *       200: { description: OK }
- *       401: { description: Unauthorized }
  *       404: { description: Slot not found }
  */
 router.get(
   "/slots/:slotId",
-  authenticateToken,
-  authorizeRoles("admin", "staff", "user"),
   getSlotByIdController
 );
 
