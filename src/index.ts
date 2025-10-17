@@ -15,6 +15,7 @@ import vehicleRoutes from "./routes/vehicle.routes";
 import pricingRoutes from "./routes/pricing.routes";
 import vnpayRoutes from "./routes/vnpay.routes";
 import transactionRoutes from "./routes/transaction.routes";
+import chargingRoutes from "./routes/charging.routes";
 import subscriptionRoutes from "./routes/subscription.routes";
 import subscriptionPlanRoutes from "./routes/subscriptionPlan.routes";
 
@@ -107,6 +108,7 @@ app.use("/vehicles", vehicleRoutes);
 app.use("/pricing", pricingRoutes);
 app.use("/vnpay", vnpayRoutes);
 app.use("/transactions", transactionRoutes);
+app.use("/charging", chargingRoutes);
 app.use("/subscriptions", subscriptionRoutes);
 app.use("/subscription-plans", subscriptionPlanRoutes);
 
@@ -213,11 +215,11 @@ app.get("/", (_req: Request, res: Response) => {
         delete: "DELETE /stations/ports/:portId (admin)",
       },
       slots: {
-        listByPort: "GET /stations/ports/:portId/slots (admin, staff, user)",
+        listByPort: "GET /stations/ports/:portId/slots (admin, staff)",
         createInPort: "POST /stations/ports/:portId/slots (admin, staff)",
-        getById: "GET /stations/slots/:slotId (admin, staff, user)",
+        getById: "GET /stations/slots/:slotId (admin, staff)",
         updateById: "PUT /stations/slots/:slotId (admin, staff)",
-        deleteById: "DELETE /stations/slots/:slotId (admin)",
+        deleteById: "DELETE /stations/slots/:slotId (admin, staff)",
       },
       transactions: {
         myHistory: "GET /transactions/my-history (Protected - user)",
@@ -226,6 +228,11 @@ app.get("/", (_req: Request, res: Response) => {
         getById: "GET /transactions/:id (Protected)",
         create: "POST /transactions (admin, staff)",
         stats: "GET /transactions/stats/:userId (admin, staff)",
+      },
+      charging: {
+        start: "POST /charging/start (Protected - bắt đầu phiên sạc)",
+        streamProgress: "GET /charging/sessions/:id/stream (Protected - SSE % pin)",
+        stop: "POST /charging/sessions/:id/stop (Protected - kết thúc phiên sạc)",
       },
       vnpay: {
         checkoutUrl: "POST /vnpay/checkout-url (Protected - tạo URL thanh toán)",

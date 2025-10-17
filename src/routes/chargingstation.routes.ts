@@ -370,7 +370,8 @@ router.delete(
  * /stations/ports/{portId}/slots:
  *   get:
  *     tags: [ChargingSlots]
- *     summary: List charging slots for a specific port - Public access
+ *     summary: List charging slots for a specific port
+ *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: path
  *         name: portId
@@ -378,10 +379,13 @@ router.delete(
  *         schema: { type: string }
  *     responses:
  *       200: { description: OK }
+ *       401: { description: Unauthorized }
  *       404: { description: Port not found }
  */
 router.get(
   "/ports/:portId/slots",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
   listSlotsByPortController
 );
 
@@ -390,7 +394,8 @@ router.get(
  * /stations/slots/{slotId}:
  *   get:
  *     tags: [ChargingSlots]
- *     summary: Get a specific charging slot by id - Public access
+ *     summary: Get a specific charging slot by id
+ *     security: [ { bearerAuth: [] } ]
  *     parameters:
  *       - in: path
  *         name: slotId
@@ -398,10 +403,13 @@ router.get(
  *         schema: { type: string }
  *     responses:
  *       200: { description: OK }
+ *       401: { description: Unauthorized }
  *       404: { description: Slot not found }
  */
 router.get(
   "/slots/:slotId",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
   getSlotByIdController
 );
 
@@ -435,6 +443,62 @@ router.post(
   authenticateToken,
   authorizeRoles("admin", "staff"),
   addSlotToPortController
+);
+
+/**
+ * @swagger
+ * /stations/slots/{slotId}:
+ *   put:
+ *     tags: [ChargingSlots]
+ *     summary: Update a specific charging slot
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: slotId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ChargingSlotUpdate'
+ *     responses:
+ *       200: { description: Updated }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       404: { description: Slot not found }
+ *       409: { description: Conflict — slot order already exists }
+ */
+router.put(
+  "/slots/:slotId",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
+  updateSlotController
+);
+
+/**
+ * @swagger
+ * /stations/slots/{slotId}:
+ *   delete:
+ *     tags: [ChargingSlots]
+ *     summary: Delete a specific charging slot
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: slotId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Deleted }
+ *       401: { description: Unauthorized }
+ *       404: { description: Slot not found }
+ */
+router.delete(
+  "/slots/:slotId",
+  authenticateToken,
+  authorizeRoles("admin", "staff"),
+  deleteSlotController
 );
 
 // 👉 Fix: export cả default lẫn named để mọi cấu hình TS đều ok
