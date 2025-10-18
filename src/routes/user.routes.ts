@@ -36,7 +36,7 @@ router.post("/create", createUserController);
  *     summary: Create a new user account
  *     description: |
  *       Registers a new user with **username, password, email, fullName** (required).
- *       Optional: **dob** (YYYY-MM-DD) and **address** (string or structured object).
+ *       Optional: **dob** (YYYY-MM-DD), **address** (string or structured object), and **numberphone** (phone number).
  *       Role is always set to `user`.
  *     requestBody:
  *       required: true
@@ -65,6 +65,7 @@ router.post("/create", createUserController);
  *                       province: { type: string, example: "Hồ Chí Minh" }
  *                       country: { type: string, example: "VN" }
  *                       postalCode: { type: string, example: "700000" }
+ *               numberphone: { type: string, example: "+84901234567" }
  *     responses:
  *       201: { description: User created }
  *       400: { description: Validation error }
