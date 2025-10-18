@@ -23,6 +23,7 @@ export interface CreateUserInput {
   fullName: string;
   dob?: string | Date | null;
   address?: PartialAddress;
+  phone?: string;
 }
 
 export interface LoginUserInput {
@@ -110,6 +111,18 @@ export async function createUser(input: CreateUserInput) {
     throw err;
   }
 
+  // Optional phone validation
+  let phone: string | undefined = undefined;
+  if (input.phone !== undefined) {
+    const raw = input.phone.trim();
+    if (raw && !phoneRegex.test(raw)) {
+      const err = new Error("Invalid phone format");
+      (err as any).status = 400;
+      throw err;
+    }
+    phone = raw || undefined;
+  }
+
   const existing = await User.findOne({
     $or: [{ username }, { email }],
   }).lean();
@@ -131,6 +144,7 @@ export async function createUser(input: CreateUserInput) {
     email,
     password: hashed,
     role: "user",
+    ...(phone ? { phone } : {}),
     profile: {
       fullName,
       ...(dob !== undefined ? { dob } : {}),

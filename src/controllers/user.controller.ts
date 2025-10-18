@@ -14,13 +14,14 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function createUserController(req: Request, res: Response) {
   try {
-    const { username, password, email, fullName, dob, address } = req.body as {
+    const { username, password, email, fullName, dob, address, numberphone } = req.body as {
       username?: string;
       password?: string;
       email?: string;
       fullName?: string;
       dob?: string;
       address?: any;
+      numberphone?: string;
     };
 
     if (
@@ -53,7 +54,8 @@ export async function createUserController(req: Request, res: Response) {
       fullName,
       ...(dob ? { dob } : {}),
       ...(address !== undefined ? { address } : {}),
-    };
+      ...(numberphone !== undefined ? { phone: numberphone } : {}),
+    } as any;
 
     const user = await createUser(payload);
     return res.status(201).json(user);
