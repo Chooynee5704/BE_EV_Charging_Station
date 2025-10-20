@@ -298,8 +298,20 @@ export async function changePassword(input: ChangePasswordInput) {
 }
 
 export async function getAllUsers() {
-  const users = await User.find();
-  return users.map((u) => u.toJSON());
+  const users = await User.find().lean();
+  return users.map((user: any) => {
+    const profile = user.profile ?? {};
+    return {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+      email: user.email ?? null,
+      fullName: profile.fullName ?? null,
+      dob: profile.dob ? new Date(profile.dob).toISOString() : null,
+      address: profile.address ?? null,
+      phone: user.phone ?? null,
+    };
+  });
 }
 
 export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
