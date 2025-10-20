@@ -385,7 +385,7 @@ router.delete(
 router.get(
   "/ports/:portId/slots",
   authenticateToken,
-  authorizeRoles("admin", "staff"),
+  authorizeRoles("admin", "staff", "user"),
   listSlotsByPortController
 );
 
@@ -409,7 +409,7 @@ router.get(
 router.get(
   "/slots/:slotId",
   authenticateToken,
-  authorizeRoles("admin", "staff"),
+  authorizeRoles("admin", "staff", "user"),
   getSlotByIdController
 );
 
