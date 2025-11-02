@@ -6,8 +6,6 @@ import {
   getUserProfileController,
   updateUserProfileController,
   changePasswordController,
-  disableUserController,
-  restoreUserController,
 } from "../controllers/user.controller";
 import {
   authenticateToken,
@@ -133,7 +131,9 @@ router.put(
  *     summary: Update authenticated user profile
  *     description: |
  *       Requires JWT token. Roles allowed: admin, staff, user.
- *       Các field **đều tùy chọn**; chỉ field gửi lên mới được cập nhật.
+ *       Admins may supply `userId` to update another user's status or profile.
+ *       Staff/User can only update their own profile details.
+ *       All input fields are optional; only provided values are updated.
  *     security: [ { bearerAuth: [] } ]
  *     requestBody:
  *       required: true
@@ -142,6 +142,10 @@ router.put(
  *           schema:
  *             type: object
  *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: Admin only. Target another user when provided.
+ *                 example: "66f8b2ab1f4c3f6e9f123456"
  *               username: { type: string, example: "meomeo.new" }
  *               email: { type: string, format: email, example: "meomeo.new@example.com" }
  *               phone: { type: string, example: "+84901234567" }
@@ -164,6 +168,10 @@ router.put(
  *                       province: { type: string }
  *                       country: { type: string }
  *                       postalCode: { type: string }
+ *               status:
+ *                 type: string
+ *                 enum: [active, disabled]
+ *                 description: Admin only. Set "disabled" to block login or "active" to re-enable.
  *     responses:
  *       200: { description: Profile updated }
  *       400: { description: Validation error }
@@ -315,65 +323,6 @@ router.post("/password/reset", resetPasswordController);
  *     responses:
  *       200: { description: Password has been reset }
  *       400: { description: Invalid input or token/otp }
- *       404: { description: User not found }
- */
-
-router.delete(
-  "/:id",
-  authenticateToken,
-  authorizeRoles("admin"),
-  disableUserController
-);
-/**
- * @swagger
- * /users/{id}:
- *   delete:
- *     tags: [Users]
- *     summary: Disable a user account (soft delete - admin only)
- *     description: |
- *       Marks the user account as `disabled`. The account and related data remain in the system.
- *       Disabled users cannot sign in until re-enabled.
- *     security: [ { bearerAuth: [] } ]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: User ID to disable
- *     responses:
- *       200: { description: User disabled }
- *       400: { description: Invalid user id }
- *       401: { description: Unauthorized }
- *       403: { description: Forbidden (not admin) }
- *       404: { description: User not found }
- */
-
-router.patch(
-  "/:id/restore",
-  authenticateToken,
-  authorizeRoles("admin"),
-  restoreUserController
-);
-/**
- * @swagger
- * /users/{id}/restore:
- *   patch:
- *     tags: [Users]
- *     summary: Re-enable a previously disabled user account (admin only)
- *     description: |
- *       Sets the user account status back to `active`, allowing them to sign in and use the system normally.
- *     security: [ { bearerAuth: [] } ]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: User ID to restore
- *     responses:
- *       200: { description: User re-enabled }
- *       400: { description: Invalid user id }
- *       401: { description: Unauthorized }
- *       403: { description: Forbidden (not admin) }
  *       404: { description: User not found }
  */
 

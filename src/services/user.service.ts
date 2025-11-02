@@ -1,7 +1,6 @@
 ﻿import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Types } from "mongoose";
-import { User, UserStatus } from "../models/user.model";
+import { User, UserRole, UserStatus } from "../models/user.model";
 
 type PartialAddress =
   | {
@@ -37,19 +36,16 @@ export interface LoginResponse {
   token: string;
 }
 
-export interface UpdateUserStatusInput {
-  userId: string;
-  status: UserStatus;
-}
-
 export interface UpdateProfileInput {
   userId: string;
+  requesterRole: UserRole;
   username?: string;
   email?: string;
   phone?: string | null;
   fullName?: string;
   dob?: string | Date | null;
   address?: PartialAddress | null;
+  status?: UserStatus;
 }
 
 export interface ChangePasswordInput {
@@ -163,7 +159,7 @@ export async function createUser(input: CreateUserInput) {
 }
 
 export async function updateUserProfile(input: UpdateProfileInput) {
-  const { userId } = input;
+  const { userId, requesterRole } = input;
   const setOps: any = {};
   const unsetOps: any = {};
 
@@ -237,6 +233,27 @@ export async function updateUserProfile(input: UpdateProfileInput) {
     } else {
       unsetOps["profile.address"] = "";
     }
+  }
+
+  if (input.status !== undefined) {
+    if (requesterRole !== "admin") {
+      const err = new Error("Only admins can update user status");
+      (err as any).status = 403;
+      throw err;
+    }
+
+    const normalizedStatus =
+      input.status === "disabled"
+        ? "disabled"
+        : input.status === "active"
+        ? "active"
+        : null;
+    if (!normalizedStatus) {
+      const err = new Error("Invalid status");
+      (err as any).status = 400;
+      throw err;
+    }
+    setOps.status = normalizedStatus;
   }
 
   const updateDoc: any = {};
@@ -374,35 +391,4 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
   );
 
   return { user: user.toJSON(), token };
-}
-
-export async function updateUserStatus(input: UpdateUserStatusInput) {
-  const { userId, status } = input;
-
-  if (!Types.ObjectId.isValid(userId)) {
-    const err = new Error("Invalid userId");
-    (err as any).status = 400;
-    throw err;
-  }
-
-  if (!["active", "disabled"].includes(status)) {
-    const err = new Error("Invalid status");
-    (err as any).status = 400;
-    throw err;
-  }
-
-  const user = await User.findById(userId);
-  if (!user) {
-    const err = new Error("User not found");
-    (err as any).status = 404;
-    throw err;
-  }
-
-  if (user.status === status) {
-    return user.toJSON();
-  }
-
-  user.status = status;
-  await user.save();
-  return user.toJSON();
 }
