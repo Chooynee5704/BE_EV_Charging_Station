@@ -6,7 +6,6 @@ import {
   CreateUserInput,
   updateUserProfile,
   changePassword,
-  updateUserStatus,
 } from "../services/user.service";
 import { AuthenticatedRequest } from "../types";
 import { User } from "../models/user.model";
@@ -153,6 +152,7 @@ export async function getUserProfileController(
         userId: user._id.toString(),
         username: user.username,
         role: user.role,
+        status: user.status,
         email: user.email ?? null,
         fullName: profile.fullName ?? null,
         dob: profile.dob ? new Date(profile.dob).toISOString() : null,
@@ -187,22 +187,103 @@ export async function updateUserProfileController(
         });
     }
 
-    const { username, email, phone, fullName, dob, address } = req.body as {
+    const {
+      userId: targetUserIdFromBody,
+      username,
+      email,
+      phone,
+      fullName,
+      dob,
+      address,
+      status,
+    } = req.body as {
+      userId?: string;
       username?: string;
       email?: string;
       phone?: string | null;
       fullName?: string;
       dob?: string | null;
       address?: any | null;
+      status?: string;
     };
 
-    const input: any = { userId: req.user.userId };
+    const requesterRole = req.user.role;
+    let targetUserId = req.user.userId;
+
+    if (requesterRole === "admin" && targetUserIdFromBody) {
+      if (typeof targetUserIdFromBody !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "userId must be a string",
+        });
+      }
+      const trimmedTargetId = targetUserIdFromBody.trim();
+      if (!trimmedTargetId) {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "userId must not be empty",
+        });
+      }
+      targetUserId = trimmedTargetId;
+    } else if (requesterRole !== "admin" && targetUserIdFromBody !== undefined) {
+      if (typeof targetUserIdFromBody !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "userId must be a string",
+        });
+      }
+
+      const trimmedTargetId = targetUserIdFromBody.trim();
+      if (trimmedTargetId && trimmedTargetId !== req.user.userId) {
+        return res.status(403).json({
+          success: false,
+          error: "Forbidden",
+          message: "You do not have permission to update this user",
+        });
+      }
+    }
+
+    if (status !== undefined && requesterRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Only admins can update user status",
+      });
+    }
+
+    const input: any = {
+      userId: targetUserId,
+      requesterRole,
+    };
     if (username !== undefined) input.username = username;
     if (email !== undefined) input.email = email;
     if (phone !== undefined) input.phone = phone;
     if (fullName !== undefined) input.fullName = fullName;
     if (dob !== undefined) input.dob = dob;
     if (address !== undefined) input.address = address;
+    if (status !== undefined) {
+      if (typeof status !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "status must be a string",
+        });
+      }
+
+      const normalizedStatus = status.trim().toLowerCase();
+      if (normalizedStatus !== "active" && normalizedStatus !== "disabled") {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "status must be either 'active' or 'disabled'",
+        });
+      }
+
+      input.status = normalizedStatus;
+    }
 
     const updated = await updateUserProfile(input);
 
@@ -305,78 +386,6 @@ export async function changePasswordController(
           ? "InvalidInput"
           : "ServerError",
       message,
-    });
-  }
-}
-
-export async function disableUserController(
-  req: AuthenticatedRequest,
-  res: Response
-): Promise<Response> {
-  try {
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        error: "InvalidInput",
-        message: "User id is required",
-      });
-    }
-
-    const updated = await updateUserStatus({ userId: id, status: "disabled" });
-
-    return res.status(200).json({
-      success: true,
-      message: "User account disabled",
-      data: updated,
-    });
-  } catch (error: any) {
-    const status = error?.status || 500;
-    return res.status(status).json({
-      success: false,
-      error:
-        status === 404
-          ? "NotFound"
-          : status === 400
-          ? "InvalidInput"
-          : "ServerError",
-      message: error?.message || "Failed to disable user",
-    });
-  }
-}
-
-export async function restoreUserController(
-  req: AuthenticatedRequest,
-  res: Response
-): Promise<Response> {
-  try {
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        error: "InvalidInput",
-        message: "User id is required",
-      });
-    }
-
-    const updated = await updateUserStatus({ userId: id, status: "active" });
-
-    return res.status(200).json({
-      success: true,
-      message: "User account re-enabled",
-      data: updated,
-    });
-  } catch (error: any) {
-    const status = error?.status || 500;
-    return res.status(status).json({
-      success: false,
-      error:
-        status === 404
-          ? "NotFound"
-          : status === 400
-          ? "InvalidInput"
-          : "ServerError",
-      message: error?.message || "Failed to restore user",
     });
   }
 }
