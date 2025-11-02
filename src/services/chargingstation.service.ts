@@ -15,6 +15,7 @@ import {
   IChargingSlot,
   ChargingSlotStatus,
 } from "../models/chargingslot.model";
+import { Reservation } from "../models/reservation.model";
 
 /* ======================= Limits ======================= */
 export const MAX_STATION_COUNT = 120; // total stations allowed in system
@@ -692,6 +693,43 @@ async function ensurePortExists(portId: string) {
   return port;
 }
 
+type ReservationItemLean = {
+  slot: Types.ObjectId;
+  startAt: Date;
+  endAt: Date;
+};
+
+async function findReservedSlotIds(slotIds: Types.ObjectId[]) {
+  if (!slotIds.length) {
+    return new Set<string>();
+  }
+
+  const reservedSlotIds = new Set<string>();
+  const slotIdSet = new Set(slotIds.map((id) => id.toString()));
+
+  const activeReservations = (await Reservation.find({
+    status: { $in: ["pending", "confirmed"] },
+    items: {
+      $elemMatch: {
+        slot: { $in: slotIds },
+      },
+    },
+  })
+    .select({ items: 1 })
+    .lean()) as Array<{ items: ReservationItemLean[] }>;
+
+  for (const reservation of activeReservations) {
+    for (const item of reservation.items ?? []) {
+      const slotId = item.slot?.toString?.();
+      if (slotId && slotIdSet.has(slotId)) {
+        reservedSlotIds.add(slotId);
+      }
+    }
+  }
+
+  return reservedSlotIds;
+}
+
 export async function listSlotsByPort(portId: string) {
   ensureValidObjectId(portId, "portId");
   await ensurePortExists(portId);
@@ -700,7 +738,19 @@ export async function listSlotsByPort(portId: string) {
     order: 1,
     createdAt: -1,
   });
-  return slots.map((s) => s.toJSON());
+  const reservedSlotIds = await findReservedSlotIds(
+    slots.map((s) => s._id as Types.ObjectId)
+  );
+  return slots.map((s) => {
+    const json = s.toJSON();
+    const slotId = s._id as Types.ObjectId;
+    if (json.status !== "inactive") {
+      json.status = reservedSlotIds.has(slotId.toString())
+        ? "in_use"
+        : "available";
+    }
+    return json;
+  });
 }
 
 export async function getSlotById(slotId: string) {
@@ -712,7 +762,15 @@ export async function getSlotById(slotId: string) {
     e.status = 404;
     throw e;
   }
-  return slot.toJSON();
+  const slotObjectId = slot._id as Types.ObjectId;
+  const reservedSlotIds = await findReservedSlotIds([slotObjectId]);
+  const json = slot.toJSON();
+  if (json.status !== "inactive") {
+    json.status = reservedSlotIds.has(slotObjectId.toString())
+      ? "in_use"
+      : "available";
+  }
+  return json;
 }
 
 export async function addSlotToPort(portId: string, payload: SlotCreateInput) {
