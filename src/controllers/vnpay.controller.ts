@@ -208,18 +208,23 @@ export async function vnpayReturnController(
     }
   } catch (updateErr) {
     console.error("Failed to update transaction from return URL:", updateErr);
-    // Không dừng flow, vẫn trả về kết quả
+    // Không dừng flow, vẫn redirect
   }
 
-  return res.status(200).json({
-    success: true,
-    message: verification.message,
-    data: {
-      isValid: verification.isValid,
-      vnp_ResponseCode: verification.code,
-      params: verification.data,
-    },
-  });
+  // Xác định trạng thái thanh toán để redirect đúng trang
+  const { status: paymentStatus } = determineTransactionStatus(verification.code, verification.isValid);
+  
+  // Redirect về frontend dựa trên trạng thái thanh toán
+  if (paymentStatus === "success") {
+    // Thanh toán thành công -> redirect về trang success
+    return res.redirect("http://localhost:5173/payment-success");
+  } else if (paymentStatus === "cancelled") {
+    // User hủy thanh toán -> redirect về trang cancelled
+    return res.redirect("http://localhost:5173/payment-cancelled");
+  } else {
+    // Thanh toán thất bại -> redirect về trang failed
+    return res.redirect("http://localhost:5173/payment-failed");
+  }
 }
 
 // POST /vnpay/check-payment-status

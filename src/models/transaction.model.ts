@@ -38,8 +38,8 @@ export interface ITransaction extends Document {
 
 const VnpayDetailsSchema = new Schema<IVnpayDetails>(
   {
-    vnp_TxnRef: { type: String, index: true },
-    vnp_TransactionNo: { type: String, index: true },
+    vnp_TxnRef: { type: String },
+    vnp_TransactionNo: { type: String },
     vnp_BankCode: { type: String },
     vnp_CardType: { type: String },
     vnp_ResponseCode: { type: String },

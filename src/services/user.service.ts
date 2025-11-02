@@ -1,6 +1,7 @@
 ﻿import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { User } from "../models/user.model";
+import { Types } from "mongoose";
+import { User, UserStatus } from "../models/user.model";
 
 type PartialAddress =
   | {
@@ -34,6 +35,11 @@ export interface LoginUserInput {
 export interface LoginResponse {
   user: any;
   token: string;
+}
+
+export interface UpdateUserStatusInput {
+  userId: string;
+  status: UserStatus;
 }
 
 export interface UpdateProfileInput {
@@ -144,6 +150,7 @@ export async function createUser(input: CreateUserInput) {
     email,
     password: hashed,
     role: "user",
+    status: "active",
     ...(phone ? { phone } : {}),
     profile: {
       fullName,
@@ -298,13 +305,27 @@ export async function changePassword(input: ChangePasswordInput) {
 }
 
 export async function getAllUsers() {
+  await Promise.all([
+    User.updateMany(
+      { $or: [{ status: { $exists: false } }, { status: null }] },
+      { $set: { status: "active" } }
+    ),
+    User.updateMany(
+      { $or: [{ role: { $exists: false } }, { role: null }] },
+      { $set: { role: "user" } }
+    ),
+  ]);
+
   const users = await User.find().lean();
   return users.map((user: any) => {
     const profile = user.profile ?? {};
+    const status: UserStatus =
+      user?.status === "disabled" ? "disabled" : "active";
     return {
       userId: user._id.toString(),
       username: user.username,
-      role: user.role,
+      role: user.role || "user",
+      status,
       email: user.email ?? null,
       fullName: profile.fullName ?? null,
       dob: profile.dob ? new Date(profile.dob).toISOString() : null,
@@ -321,6 +342,12 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
   if (!user) {
     const err = new Error("Invalid username or password");
     (err as any).status = 401;
+    throw err;
+  }
+
+  if (user.status === "disabled") {
+    const err = new Error("Account is disabled. Please contact support.");
+    (err as any).status = 403;
     throw err;
   }
 
@@ -347,4 +374,35 @@ export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
   );
 
   return { user: user.toJSON(), token };
+}
+
+export async function updateUserStatus(input: UpdateUserStatusInput) {
+  const { userId, status } = input;
+
+  if (!Types.ObjectId.isValid(userId)) {
+    const err = new Error("Invalid userId");
+    (err as any).status = 400;
+    throw err;
+  }
+
+  if (!["active", "disabled"].includes(status)) {
+    const err = new Error("Invalid status");
+    (err as any).status = 400;
+    throw err;
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    const err = new Error("User not found");
+    (err as any).status = 404;
+    throw err;
+  }
+
+  if (user.status === status) {
+    return user.toJSON();
+  }
+
+  user.status = status;
+  await user.save();
+  return user.toJSON();
 }

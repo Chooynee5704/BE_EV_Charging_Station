@@ -187,9 +187,21 @@ router.post("/check-payment-status", checkPaymentStatusController);
  *   get:
  *     tags: [VNPay]
  *     summary: Return URL (client redirect) từ VNPay
- *     description: VNPay sẽ redirect người dùng về URL này, kèm tham số ký số. Server xác minh chữ ký và trả JSON demo.
+ *     description: |
+ *       VNPay sẽ redirect người dùng về URL này, kèm tham số ký số. 
+ *       Server xác minh chữ ký và redirect về frontend:
+ *       - Thành công: http://localhost:5173/payment-success
+ *       - Hủy: http://localhost:5173/payment-cancelled  
+ *       - Thất bại: http://localhost:5173/payment-failed
  *     responses:
- *       200: { description: OK }
+ *       302: 
+ *         description: Redirect về frontend tương ứng với trạng thái thanh toán
+ *         headers:
+ *           Location:
+ *             description: URL redirect
+ *             schema:
+ *               type: string
+ *               example: "http://localhost:5173/payment-success"
  */
 router.get("/return", vnpayReturnController);
 

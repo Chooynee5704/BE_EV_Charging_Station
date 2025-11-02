@@ -6,6 +6,7 @@ import {
   CreateUserInput,
   updateUserProfile,
   changePassword,
+  updateUserStatus,
 } from "../services/user.service";
 import { AuthenticatedRequest } from "../types";
 import { User } from "../models/user.model";
@@ -304,6 +305,78 @@ export async function changePasswordController(
           ? "InvalidInput"
           : "ServerError",
       message,
+    });
+  }
+}
+
+export async function disableUserController(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<Response> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "User id is required",
+      });
+    }
+
+    const updated = await updateUserStatus({ userId: id, status: "disabled" });
+
+    return res.status(200).json({
+      success: true,
+      message: "User account disabled",
+      data: updated,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    return res.status(status).json({
+      success: false,
+      error:
+        status === 404
+          ? "NotFound"
+          : status === 400
+          ? "InvalidInput"
+          : "ServerError",
+      message: error?.message || "Failed to disable user",
+    });
+  }
+}
+
+export async function restoreUserController(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<Response> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "User id is required",
+      });
+    }
+
+    const updated = await updateUserStatus({ userId: id, status: "active" });
+
+    return res.status(200).json({
+      success: true,
+      message: "User account re-enabled",
+      data: updated,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    return res.status(status).json({
+      success: false,
+      error:
+        status === 404
+          ? "NotFound"
+          : status === 400
+          ? "InvalidInput"
+          : "ServerError",
+      message: error?.message || "Failed to restore user",
     });
   }
 }

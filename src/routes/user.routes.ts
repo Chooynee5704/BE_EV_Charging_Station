@@ -6,6 +6,8 @@ import {
   getUserProfileController,
   updateUserProfileController,
   changePasswordController,
+  disableUserController,
+  restoreUserController,
 } from "../controllers/user.controller";
 import {
   authenticateToken,
@@ -251,7 +253,7 @@ router.get("/password/verify", verifyResetTokenController);
  * /users/password/verify:
  *   get:
  *     tags: [Authentication]
- *     summary: Verify reset token (legacy: requires uid)
+ *     summary: "Verify reset token (legacy: requires uid)"
  *     parameters:
  *       - in: query
  *         name: token
@@ -272,7 +274,7 @@ router.get("/password/otp/verify", verifyResetOtpController);
  * /users/password/otp/verify:
  *   get:
  *     tags: [Authentication]
- *     summary: Verify reset OTP (legacy: requires uid)
+ *     summary: "Verify reset OTP (legacy: requires uid)"
  *     parameters:
  *       - in: query
  *         name: otp
@@ -313,6 +315,65 @@ router.post("/password/reset", resetPasswordController);
  *     responses:
  *       200: { description: Password has been reset }
  *       400: { description: Invalid input or token/otp }
+ *       404: { description: User not found }
+ */
+
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("admin"),
+  disableUserController
+);
+/**
+ * @swagger
+ * /users/{id}:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Disable a user account (soft delete - admin only)
+ *     description: |
+ *       Marks the user account as `disabled`. The account and related data remain in the system.
+ *       Disabled users cannot sign in until re-enabled.
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: User ID to disable
+ *     responses:
+ *       200: { description: User disabled }
+ *       400: { description: Invalid user id }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (not admin) }
+ *       404: { description: User not found }
+ */
+
+router.patch(
+  "/:id/restore",
+  authenticateToken,
+  authorizeRoles("admin"),
+  restoreUserController
+);
+/**
+ * @swagger
+ * /users/{id}/restore:
+ *   patch:
+ *     tags: [Users]
+ *     summary: Re-enable a previously disabled user account (admin only)
+ *     description: |
+ *       Sets the user account status back to `active`, allowing them to sign in and use the system normally.
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: User ID to restore
+ *     responses:
+ *       200: { description: User re-enabled }
+ *       400: { description: Invalid user id }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (not admin) }
  *       404: { description: User not found }
  */
 
