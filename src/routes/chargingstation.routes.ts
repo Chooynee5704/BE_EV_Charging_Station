@@ -473,7 +473,7 @@ router.post(
 router.put(
   "/slots/:slotId",
   authenticateToken,
-  authorizeRoles("admin", "staff"),
+  authorizeRoles("admin", "staff", "user"),
   updateSlotController
 );
 

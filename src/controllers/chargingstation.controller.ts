@@ -319,8 +319,16 @@ export async function deletePortController(req: Request, res: Response) {
 
 export async function listSlotsByPortController(req: Request, res: Response) {
   try {
-    const { portId } = req.params as { portId: string };
-    const items = await listSlotsByPort(portId);
+    const rawPortId =
+      (req.params?.portId as string | undefined) ??
+      (req.query?.portId as string | undefined);
+    if (!rawPortId) {
+      return res.status(400).json({
+        error: "InvalidInput",
+        message: "portId is required",
+      });
+    }
+    const items = await listSlotsByPort(rawPortId);
     return res.status(200).json({ items });
   } catch (error: any) {
     const status = error?.status || 500;
