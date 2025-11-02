@@ -15,9 +15,9 @@ const PasswordResetTokenSchema = new Schema<IPasswordResetToken>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     tokenHash: { type: String, index: true, unique: true, sparse: true },
-    expiresAt: { type: Date, index: true },
+    expiresAt: { type: Date },
     otpCodeHash: { type: String, index: true, sparse: true },
-    otpExpiresAt: { type: Date, index: true },
+    otpExpiresAt: { type: Date },
     usedAt: { type: Date, default: null },
   },
   { timestamps: true }

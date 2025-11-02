@@ -1,6 +1,7 @@
 ﻿import mongoose, { Schema, Document, Model } from "mongoose";
 
 export type UserRole = "user" | "admin" | "staff";
+export type UserStatus = "active" | "disabled";
 
 export interface IAddress {
   line1?: string;
@@ -19,6 +20,7 @@ export interface IUser extends Document {
   username: string;
   password: string;
   role: UserRole;
+  status: UserStatus;
   profile?: {
     fullName?: string;
     dob?: Date;
@@ -82,6 +84,13 @@ const UserSchema: Schema<IUser> = new Schema<IUser>(
       enum: ["user", "admin", "staff"],
       default: "user",
     },
+    status: {
+      type: String,
+      required: true,
+      enum: ["active", "disabled"],
+      default: "active",
+      index: true,
+    },
     profile: {
       fullName: { type: String, trim: true },
       dob: { type: Date },
@@ -93,9 +102,6 @@ const UserSchema: Schema<IUser> = new Schema<IUser>(
   },
   { timestamps: true }
 );
-
-UserSchema.index({ email: 1 });
-UserSchema.index({ username: 1 });
 
 // 👇 virtual: 1 user -> many vehicles
 UserSchema.virtual("vehicles", {

@@ -57,8 +57,6 @@ const VehicleSchema = new Schema<IVehicle>(
 );
 
 VehicleSchema.index({ owner: 1, plateNumber: 1 });
-VehicleSchema.index({ plateNumber: 1 }, { unique: true });
-
 VehicleSchema.set("toJSON", {
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id;

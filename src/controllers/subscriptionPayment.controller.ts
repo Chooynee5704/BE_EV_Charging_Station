@@ -256,12 +256,20 @@ export async function checkSubscriptionPaymentStatusController(
     // Lấy subscription mới nhất sau khi activate
     const updatedSubscription = await getSubscriptionById(subscriptionId);
 
+    // Prepare redirect data so the frontend can navigate with full VNPay payload
+    const redirectParams = buildSubscriptionRedirectParams(
+      queryData as Record<string, unknown>,
+      String(subscriptionId)
+    );
+    const redirectUrl = buildSubscriptionRedirectUrl(paymentStatus, redirectParams);
+
     return res.status(200).json({
       success: true,
       message: `Thanh toán ${paymentStatus === "success" ? "thành công" : "không thành công"}`,
       data: {
         paymentStatus,
         reason,
+        subscriptionId,
         vnpayInfo: {
           responseCode: vnpResponseCode,
           transactionNo: verification.data.vnp_TransactionNo,
@@ -280,6 +288,10 @@ export async function checkSubscriptionPaymentStatusController(
           price: updatedSubscription.price,
         },
         transaction: transactionInfo,
+        redirect: {
+          url: redirectUrl,
+          params: redirectParams,
+        },
       },
     });
   } catch (error: any) {
@@ -310,5 +322,66 @@ function getVnpayErrorMessage(code: string): string {
   };
 
   return errorMessages[code] || `Lỗi không xác định (${code})`;
+}
+
+function buildSubscriptionRedirectParams(
+  rawParams: Record<string, unknown>,
+  subscriptionId: string
+): Record<string, string> {
+  const params: Record<string, string> = {};
+
+  if (rawParams) {
+    Object.entries(rawParams).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+
+      if (Array.isArray(value)) {
+        const firstDefined = value.find(
+          (item) => item !== undefined && item !== null && item !== ""
+        );
+        if (firstDefined === undefined || firstDefined === null) return;
+        params[key] = String(firstDefined);
+        return;
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        params[key] = String(value);
+      }
+    });
+  }
+
+  params.subscriptionId = subscriptionId;
+  return params;
+}
+
+function buildSubscriptionRedirectUrl(
+  status: "success" | "failed" | "cancelled",
+  params: Record<string, string>
+): string | null {
+  const frontendBase = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+  const targetPath = {
+    success: "/payment-success",
+    failed: "/payment-failed",
+    cancelled: "/payment-cancelled",
+  } as const;
+
+  const path = targetPath[status];
+  if (!path) return null;
+
+  const entries = Object.entries(params).filter(
+    ([, value]) => value !== undefined && value !== null && value !== ""
+  );
+  if (!entries.length) {
+    return `${frontendBase}${path}`;
+  }
+
+  const query = entries
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+
+  return `${frontendBase}${path}?${query}`;
 }
 
