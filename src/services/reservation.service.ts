@@ -131,7 +131,16 @@ export async function createReservation(input: CreateReservationInput) {
         items: normalized,
         status,
       });
-      return await doc.save({ session });
+      const savedDoc = await doc.save({ session });
+
+      // Update slot status to "booked" for all slots in the reservation
+      const slotIdsToUpdate = normalized.map((i) => i.slot);
+      await ChargingSlot.updateMany(
+        { _id: { $in: slotIdsToUpdate } },
+        { $set: { status: "booked" } }
+      ).session(session);
+
+      return savedDoc;
     })) as HydratedDocument<IReservation> | null;
 
     if (!created) {
@@ -252,7 +261,79 @@ export async function cancelReservation(
     throw e;
   }
 
-  doc.status = "cancelled";
-  await doc.save();
-  return doc.toJSON();
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      doc.status = "cancelled";
+      await doc.save({ session });
+
+      // Update slot status back to "available" for all slots in the reservation
+      const slotIdsToUpdate = doc.items.map((i) => i.slot);
+      await ChargingSlot.updateMany(
+        { _id: { $in: slotIdsToUpdate } },
+        { $set: { status: "available" } }
+      ).session(session);
+    });
+    return doc.toJSON();
+  } finally {
+    session.endSession();
+  }
+}
+
+export async function completeReservation(
+  id: string,
+  requesterUserId?: string,
+  isAdminOrStaff = false
+) {
+  if (!Types.ObjectId.isValid(id)) {
+    const e: any = new Error("id is not a valid ObjectId");
+    e.status = 400;
+    throw e;
+  }
+
+  const doc = await Reservation.findById(id).populate("vehicle");
+  if (!doc) {
+    const e: any = new Error("Reservation not found");
+    e.status = 404;
+    throw e;
+  }
+
+  if (!isAdminOrStaff) {
+    const vehicle: any = doc.vehicle;
+    if (!vehicle || String(vehicle.owner) !== String(requesterUserId)) {
+      const e: any = new Error("Forbidden");
+      e.status = 403;
+      throw e;
+    }
+  }
+
+  if (doc.status === "cancelled") {
+    const e: any = new Error(`Cannot complete a cancelled reservation`);
+    e.status = 400;
+    throw e;
+  }
+
+  if (doc.status === "completed") {
+    const e: any = new Error(`Reservation is already completed`);
+    e.status = 400;
+    throw e;
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      doc.status = "completed";
+      await doc.save({ session });
+
+      // Update slot status back to "available" for all slots in the reservation
+      const slotIdsToUpdate = doc.items.map((i) => i.slot);
+      await ChargingSlot.updateMany(
+        { _id: { $in: slotIdsToUpdate } },
+        { $set: { status: "available" } }
+      ).session(session);
+    });
+    return doc.toJSON();
+  } finally {
+    session.endSession();
+  }
 }

@@ -8,6 +8,7 @@ import {
   listMyReservationsController,
   getReservationController,
   cancelReservationController,
+  completeReservationController,
   qrCheckController,
 } from "../controllers/reservation.controller";
 
@@ -166,6 +167,31 @@ router.patch(
   authenticateToken,
   authorizeRoles("admin", "staff", "user"),
   cancelReservationController
+);
+
+/**
+ * @swagger
+ * /reservations/{id}/complete:
+ *   patch:
+ *     tags: [Reservations]
+ *     summary: Complete a reservation (owner or admin/staff)
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Reservation completed }
+ *       403: { description: Forbidden }
+ *       404: { description: NotFound }
+ *       400: { description: InvalidInput }
+ */
+router.patch(
+  "/:id/complete",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  completeReservationController
 );
 
 /**

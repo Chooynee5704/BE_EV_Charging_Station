@@ -4,6 +4,7 @@ import {
   listReservations,
   getReservationById,
   cancelReservation,
+  completeReservation,
   CreateReservationInput,
 } from "../services/reservation.service";
 import { AuthenticatedRequest } from "../types";
@@ -50,13 +51,11 @@ export async function createReservationController(
     if (!isAdminOrStaff) {
       const v = await Vehicle.findById(vehicleId).lean();
       if (!v) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            error: "NotFound",
-            message: "Vehicle not found",
-          });
+        return res.status(404).json({
+          success: false,
+          error: "NotFound",
+          message: "Vehicle not found",
+        });
       }
       if (String(v.owner) !== req.user.userId) {
         return res
@@ -333,6 +332,53 @@ export async function qrCheckController(
     return res.status(status).json({
       success: false,
       error: "ServerError",
+      message,
+    });
+  }
+}
+
+export async function completeReservationController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    const { id } = (req.params || {}) as { id?: string };
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "Missing reservation id",
+      });
+    }
+
+    if (!req.user?.userId) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+    }
+
+    const isAdminOrStaff =
+      req.user.role === "admin" || req.user.role === "staff";
+    const doc = await completeReservation(id, req.user.userId, isAdminOrStaff);
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Reservation completed", data: doc });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    const message = error?.message || "Unexpected server error";
+    return res.status(status).json({
+      success: false,
+      error:
+        status === 404
+          ? "NotFound"
+          : status === 403
+          ? "Forbidden"
+          : status === 400
+          ? "InvalidInput"
+          : "ServerError",
       message,
     });
   }
