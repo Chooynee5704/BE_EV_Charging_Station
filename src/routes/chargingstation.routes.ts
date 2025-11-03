@@ -161,10 +161,7 @@ router.post(
  *     responses:
  *       200: { description: OK }
  */
-router.get(
-  "/",
-  listChargingStationsController
-);
+router.get("/", listChargingStationsController);
 
 /**
  * @swagger
@@ -176,7 +173,10 @@ router.get(
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging station
+ *         schema:
+ *           type: string
+ *           example: "6905f21940f17086b8a37479"
  *       - in: query
  *         name: includePorts
  *         schema: { type: boolean, example: true }
@@ -184,10 +184,7 @@ router.get(
  *       200: { description: OK }
  *       404: { description: Not found }
  */
-router.get(
-  "/:id",
-  getChargingStationByIdController
-);
+router.get("/:id", getChargingStationByIdController);
 
 /**
  * @swagger
@@ -203,7 +200,10 @@ router.get(
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging station
+ *         schema:
+ *           type: string
+ *           example: "6905f21940f17086b8a37479"
  *     requestBody:
  *       required: true
  *       content:
@@ -247,7 +247,10 @@ router.put(
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging station
+ *         schema:
+ *           type: string
+ *           example: "6905f21940f17086b8a37479"
  *     responses:
  *       200: { description: Marked as inactive }
  *       401: { description: Unauthorized }
@@ -298,15 +301,15 @@ router.post(
  *       - in: path
  *         name: portId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging port
+ *         schema:
+ *           type: string
+ *           example: "6905f23240f17086b8a37491"
  *     responses:
  *       200: { description: OK }
  *       404: { description: Not found }
  */
-router.get(
-  "/ports/:portId",
-  getPortByIdController
-);
+router.get("/ports/:portId", getPortByIdController);
 
 /**
  * @swagger
@@ -319,7 +322,10 @@ router.get(
  *       - in: path
  *         name: portId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging port
+ *         schema:
+ *           type: string
+ *           example: "6905f23240f17086b8a37491"
  *     requestBody:
  *       required: true
  *       content:
@@ -350,7 +356,10 @@ router.put(
  *       - in: path
  *         name: portId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging port
+ *         schema:
+ *           type: string
+ *           example: "6905f23240f17086b8a37491"
  *     responses:
  *       200: { description: Deleted }
  *       401: { description: Unauthorized }
@@ -376,7 +385,10 @@ router.delete(
  *       - in: path
  *         name: portId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging port
+ *         schema:
+ *           type: string
+ *           example: "6905f23240f17086b8a37491"
  *     responses:
  *       200: { description: OK }
  *       401: { description: Unauthorized }
@@ -400,7 +412,10 @@ router.get(
  *       - in: path
  *         name: slotId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging slot
+ *         schema:
+ *           type: string
+ *           example: "6905f23a40f17086b8a374fb"
  *     responses:
  *       200: { description: OK }
  *       401: { description: Unauthorized }
@@ -424,7 +439,10 @@ router.get(
  *       - in: path
  *         name: portId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging port
+ *         schema:
+ *           type: string
+ *           example: "6905f23240f17086b8a37491"
  *     requestBody:
  *       required: true
  *       content:
@@ -456,7 +474,10 @@ router.post(
  *       - in: path
  *         name: slotId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging slot
+ *         schema:
+ *           type: string
+ *           example: "6905f23a40f17086b8a374fb"
  *     requestBody:
  *       required: true
  *       content:
@@ -488,7 +509,10 @@ router.put(
  *       - in: path
  *         name: slotId
  *         required: true
- *         schema: { type: string }
+ *         description: The ID of the charging slot
+ *         schema:
+ *           type: string
+ *           example: "6905f23a40f17086b8a374fb"
  *     responses:
  *       200: { description: Deleted }
  *       401: { description: Unauthorized }
