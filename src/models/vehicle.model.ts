@@ -10,7 +10,6 @@ export interface IVehicle {
   year?: number; // Năm SX
   color?: string;
   plateNumber: string; // Biển số (unique)
-  vin?: string; // Số VIN (optional)
   type?: VehicleType; // Loại xe
   batteryCapacityKwh?: number; // (optional)
   connectorType?: string; // ví dụ: DC, Ultra, Type2,...
@@ -38,7 +37,6 @@ const VehicleSchema = new Schema<IVehicle>(
       uppercase: true,
       unique: true,
     },
-    vin: { type: String, trim: true, sparse: true },
     type: {
       type: String,
       enum: ["car", "motorbike", "scooter", "truck", "other"],

@@ -62,7 +62,7 @@ File: `src/models/chargingsession.model.ts`
 // Pre-save hook: Update slot status to "in_use" when session starts
 ChargingSessionSchema.pre("save", async function (next) {
   const session = this as IChargingSession;
-  
+
   // Only update slot when creating a new active session
   if (session.isNew && session.status === "active") {
     const ChargingSlot = mongoose.model("ChargingSlot");
@@ -70,21 +70,25 @@ ChargingSessionSchema.pre("save", async function (next) {
       status: "in_use",
     });
   }
-  
+
   // When session is completed or cancelled, set slot back to available
-  if (!session.isNew && session.isModified("status") && 
-      (session.status === "completed" || session.status === "cancelled")) {
+  if (
+    !session.isNew &&
+    session.isModified("status") &&
+    (session.status === "completed" || session.status === "cancelled")
+  ) {
     const ChargingSlot = mongoose.model("ChargingSlot");
     await ChargingSlot.findByIdAndUpdate(session.slot, {
       status: "available",
     });
   }
-  
+
   next();
 });
 ```
 
-**Effect**: 
+**Effect**:
+
 - When a charging session starts → slot status = "in_use"
 - When a charging session ends → slot status = "available"
 
@@ -110,29 +114,32 @@ ChargingSessionSchema.pre("save", async function (next) {
 
 ## Status Rules
 
-| Status      | Can Book? | Can Charge? | Description                           |
-|-------------|-----------|-------------|---------------------------------------|
-| available   | ✅ YES    | ✅ YES      | Slot is free and ready                |
-| booked      | ❌ NO     | ❌ NO       | Slot is reserved via reservation      |
-| in_use      | ❌ NO     | ❌ NO       | Slot is currently charging a vehicle  |
-| inactive    | ❌ NO     | ❌ NO       | Slot is disabled/maintenance          |
+| Status    | Can Book? | Can Charge? | Description                          |
+| --------- | --------- | ----------- | ------------------------------------ |
+| available | ✅ YES    | ✅ YES      | Slot is free and ready               |
+| booked    | ❌ NO     | ❌ NO       | Slot is reserved via reservation     |
+| in_use    | ❌ NO     | ❌ NO       | Slot is currently charging a vehicle |
+| inactive  | ❌ NO     | ❌ NO       | Slot is disabled/maintenance         |
 
 ## API Behavior Changes
 
 ### POST /reservations
 
 **Before Fix:**
+
 - Created reservation
 - Sometimes slot stayed "available"
 - Sometimes slot changed to "in_use" if charging started
 
 **After Fix:**
+
 - ✅ Checks if slot status is "available" before booking
 - ✅ Creates reservation
 - ✅ Updates slot status to "booked" in same transaction
 - ❌ Returns 409 error if slot is not "available"
 
 **Example Error Response:**
+
 ```json
 {
   "success": false,
@@ -144,9 +151,11 @@ ChargingSessionSchema.pre("save", async function (next) {
 ### POST /charging/start
 
 **Before Fix:**
+
 - Started charging session regardless of slot status
 
 **After Fix:**
+
 - ✅ Checks if slot status is "available"
 - ✅ Creates charging session
 - ✅ Auto-updates slot status to "in_use" (via model hook)
@@ -155,6 +164,7 @@ ChargingSessionSchema.pre("save", async function (next) {
 - ❌ Returns 400 error if slot is inactive
 
 **Example Error Responses:**
+
 ```json
 {
   "success": false,
@@ -174,18 +184,21 @@ ChargingSessionSchema.pre("save", async function (next) {
 ### PATCH /reservations/{id}/cancel
 
 **Behavior:**
+
 - ✅ Cancels reservation
 - ✅ Updates all slot statuses to "available" in same transaction
 
 ### PATCH /reservations/{id}/complete
 
 **Behavior:**
+
 - ✅ Completes reservation
 - ✅ Updates all slot statuses to "available" in same transaction
 
 ### POST /charging/sessions/{id}/stop
 
 **Behavior:**
+
 - ✅ Stops charging session
 - ✅ Auto-updates slot status to "available" (via model hook)
 
@@ -310,7 +323,8 @@ git push origin main
 
 3. **Error Handling**: Both services return proper 409 (Conflict) errors when trying to use unavailable slots.
 
-4. **Status Priority**: 
+4. **Status Priority**:
+
    - Reservations can only be created on "available" slots
    - Charging can only start on "available" slots
    - A booked slot cannot be used for charging
@@ -329,10 +343,12 @@ git push origin main
 ### Issue: Cannot book any slots
 
 **Possible Causes**:
+
 1. All slots are booked, in_use, or inactive
 2. Check slot statuses: `GET /stations/ports/{portId}/slots`
 
-**Solution**: 
+**Solution**:
+
 - Cancel unused reservations
 - Stop completed charging sessions
 - Or wait for slots to become available
@@ -340,11 +356,13 @@ git push origin main
 ### Issue: Deployment doesn't reflect changes
 
 **Possible Causes**:
+
 1. Code not pushed to repository
 2. Koyeb not deploying automatically
 3. Environment variables issues
 
 **Solution**:
+
 1. Verify git push: `git log --oneline -5`
 2. Check Koyeb deployment logs
 3. Manually trigger deployment in Koyeb dashboard
