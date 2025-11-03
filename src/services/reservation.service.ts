@@ -102,6 +102,18 @@ export async function createReservation(input: CreateReservationInput) {
     throw e;
   }
 
+  // Check if all slots are available for booking
+  const slots = await ChargingSlot.find({ _id: { $in: slotIds } }).lean();
+  for (const slot of slots) {
+    if (slot.status !== "available") {
+      const e: any = new Error(
+        `Slot ${slot._id} is not available (current status: ${slot.status}). Only available slots can be booked.`
+      );
+      e.status = 409;
+      throw e;
+    }
+  }
+
   const session = await mongoose.startSession();
   try {
     const created = (await session.withTransaction(async () => {

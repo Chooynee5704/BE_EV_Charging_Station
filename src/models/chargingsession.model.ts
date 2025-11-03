@@ -17,8 +17,18 @@ export interface IChargingSession extends Document {
 
 const ChargingSessionSchema = new Schema<IChargingSession>(
   {
-    vehicle: { type: Schema.Types.ObjectId, ref: "Vehicle", required: true, index: true },
-    slot: { type: Schema.Types.ObjectId, ref: "ChargingSlot", required: true, index: true },
+    vehicle: {
+      type: Schema.Types.ObjectId,
+      ref: "Vehicle",
+      required: true,
+      index: true,
+    },
+    slot: {
+      type: Schema.Types.ObjectId,
+      ref: "ChargingSlot",
+      required: true,
+      index: true,
+    },
     startedAt: { type: Date, required: true, index: true },
     endedAt: { type: Date, default: null },
     initialPercent: { type: Number, required: true, min: 0, max: 100 },
@@ -35,6 +45,33 @@ const ChargingSessionSchema = new Schema<IChargingSession>(
   { timestamps: true }
 );
 
+// Pre-save hook: Update slot status to "in_use" when session starts
+ChargingSessionSchema.pre("save", async function (next) {
+  const session = this as IChargingSession;
+
+  // Only update slot when creating a new active session or when status changes to active
+  if (session.isNew && session.status === "active") {
+    const ChargingSlot = mongoose.model("ChargingSlot");
+    await ChargingSlot.findByIdAndUpdate(session.slot, {
+      status: "in_use",
+    });
+  }
+
+  // When session is completed or cancelled, set slot back to available
+  if (
+    !session.isNew &&
+    session.isModified("status") &&
+    (session.status === "completed" || session.status === "cancelled")
+  ) {
+    const ChargingSlot = mongoose.model("ChargingSlot");
+    await ChargingSlot.findByIdAndUpdate(session.slot, {
+      status: "available",
+    });
+  }
+
+  next();
+});
+
 ChargingSessionSchema.set("toJSON", {
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id;
@@ -47,5 +84,3 @@ ChargingSessionSchema.set("toJSON", {
 export const ChargingSession: Model<IChargingSession> =
   mongoose.models.ChargingSession ||
   mongoose.model<IChargingSession>("ChargingSession", ChargingSessionSchema);
-
-
