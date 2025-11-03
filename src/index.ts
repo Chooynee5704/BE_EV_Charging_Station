@@ -49,7 +49,7 @@ const corsOptions: cors.CorsOptions = {
   origin(origin, cb) {
     const nOrigin = normalizeOrigin(origin);
     // Cho phép khi:
-    // - Request server-to-server (no origin)
+    // - Request server-to-server (no origin) - for Swagger UI same-origin requests
     // - Origin nằm trong danh sách cho phép
     const okList = !nOrigin || allowedOrigins.includes(nOrigin); /* ||
       extraOk.some((re) => re.test(nOrigin)) */
@@ -61,8 +61,11 @@ const corsOptions: cors.CorsOptions = {
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Length", "Content-Type"],
   credentials: true, // nếu FE dùng cookie/Authorization
   maxAge: 600,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
 
 // Đảm bảo Vary: Origin để CDN/proxy cache đúng theo Origin
@@ -97,6 +100,14 @@ app.use(
     explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
     customSiteTitle: "Node.js Backend API Documentation",
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      requestInterceptor: (req: any) => {
+        // Ensure requests from Swagger UI are treated as same-origin
+        return req;
+      },
+    },
   })
 );
 
@@ -231,14 +242,17 @@ app.get("/", (_req: Request, res: Response) => {
       },
       charging: {
         start: "POST /charging/start (Protected - bắt đầu phiên sạc)",
-        streamProgress: "GET /charging/sessions/:id/stream (Protected - SSE % pin)",
+        streamProgress:
+          "GET /charging/sessions/:id/stream (Protected - SSE % pin)",
         stop: "POST /charging/sessions/:id/stop (Protected - kết thúc phiên sạc)",
       },
       vnpay: {
-        checkoutUrl: "POST /vnpay/checkout-url (Protected - tạo URL thanh toán)",
+        checkoutUrl:
+          "POST /vnpay/checkout-url (Protected - tạo URL thanh toán)",
         return: "GET /vnpay/return (callback từ VNPay)",
         ipn: "GET /vnpay/ipn (webhook từ VNPay)",
-        checkPaymentStatus: "POST /vnpay/check-payment-status (kiểm tra trạng thái thanh toán)",
+        checkPaymentStatus:
+          "POST /vnpay/check-payment-status (kiểm tra trạng thái thanh toán)",
       },
       subscriptionPlans: {
         list: "GET /subscription-plans (danh sách gói: basic, standard, premium)",
@@ -249,17 +263,23 @@ app.get("/", (_req: Request, res: Response) => {
       },
       subscriptions: {
         create: "POST /subscriptions (admin - tạo subscription bằng planId)",
-        payment: "POST /subscriptions/payment (Protected - tạo subscription + payment URL bằng planId)",
-        checkPayment: "POST /subscriptions/check-payment-status (Protected - kiểm tra trạng thái thanh toán)",
+        payment:
+          "POST /subscriptions/payment (Protected - tạo subscription + payment URL bằng planId)",
+        checkPayment:
+          "POST /subscriptions/check-payment-status (Protected - kiểm tra trạng thái thanh toán)",
         list: "GET /subscriptions (Protected - tất cả user có thể xem)",
-        mySubscriptions: "GET /subscriptions/my-subscriptions (Protected - xem subscriptions của mình)",
-        currentActive: "GET /subscriptions/current-active (Protected - xem subscription đang hoạt động)",
+        mySubscriptions:
+          "GET /subscriptions/my-subscriptions (Protected - xem subscriptions của mình)",
+        currentActive:
+          "GET /subscriptions/current-active (Protected - xem subscription đang hoạt động)",
         getById: "GET /subscriptions/:id (Protected)",
         update: "PUT /subscriptions/:id (admin - cập nhật subscription)",
         delete: "DELETE /subscriptions/:id (admin - xóa subscription)",
-        upgrade: "POST /subscriptions/upgrade (Protected - nâng cấp bằng planId)",
+        upgrade:
+          "POST /subscriptions/upgrade (Protected - nâng cấp bằng planId)",
         cancel: "POST /subscriptions/:id/cancel (Protected - hủy subscription)",
-        activate: "POST /subscriptions/:id/activate (admin - kích hoạt subscription)",
+        activate:
+          "POST /subscriptions/:id/activate (admin - kích hoạt subscription)",
       },
     },
   });
