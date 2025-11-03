@@ -34,7 +34,6 @@ const router = Router();
  *         model: { type: string, example: "VF8" }
  *         year: { type: integer, example: 2023 }
  *         color: { type: string, example: "White" }
- *         vin: { type: string, example: "WVWAA71K08W201030" }
  *         type: { type: string, enum: [car, motorbike, scooter, truck, other], example: car }
  *         batteryCapacityKwh: { type: number, example: 82 }
  *         connectorType: { type: string, example: "DC" }
@@ -47,7 +46,6 @@ const router = Router();
  *         model: { type: string }
  *         year: { type: integer }
  *         color: { type: string }
- *         vin: { type: string, nullable: true }
  *         type: { type: string, enum: [car, motorbike, scooter, truck, other] }
  *         batteryCapacityKwh: { type: number, nullable: true }
  *         connectorType: { type: string }

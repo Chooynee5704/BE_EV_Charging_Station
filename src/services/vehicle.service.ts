@@ -13,7 +13,6 @@ export interface CreateVehicleInput {
   year?: number;
   color?: string;
   plateNumber: string;
-  vin?: string;
   type?: VehicleType;
   batteryCapacityKwh?: number;
   connectorType?: string;
@@ -27,7 +26,6 @@ export interface UpdateVehicleInput {
   year?: number | null;
   color?: string | null;
   plateNumber?: string; // changing plate allowed if unique
-  vin?: string | null;
   type?: VehicleType;
   batteryCapacityKwh?: number | null;
   connectorType?: string | null;
@@ -79,7 +77,6 @@ export async function createVehicle(input: CreateVehicleInput) {
     year: input.year,
     color: input.color?.trim(),
     plateNumber: input.plateNumber.trim().toUpperCase(),
-    vin: input.vin?.trim(),
     type: input.type ?? "car",
     batteryCapacityKwh: input.batteryCapacityKwh,
     connectorType: input.connectorType?.trim(),
@@ -140,7 +137,6 @@ export async function updateVehicle(input: UpdateVehicleInput) {
     year,
     color,
     plateNumber,
-    vin,
     type,
     batteryCapacityKwh,
     connectorType,
@@ -171,10 +167,6 @@ export async function updateVehicle(input: UpdateVehicleInput) {
       throw e;
     }
     setOps.plateNumber = newPlate;
-  }
-  if (vin !== undefined) {
-    if (vin === null) unsetOps.vin = "";
-    else setOps.vin = vin?.trim();
   }
   if (type !== undefined) setOps.type = type;
   if (batteryCapacityKwh !== undefined) {

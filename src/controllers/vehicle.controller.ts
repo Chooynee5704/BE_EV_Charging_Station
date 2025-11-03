@@ -41,7 +41,6 @@ export async function createVehicleController(
       ...(body.model !== undefined ? { model: body.model } : {}),
       ...(body.year !== undefined ? { year: body.year } : {}),
       ...(body.color !== undefined ? { color: body.color } : {}),
-      ...(body.vin !== undefined ? { vin: body.vin } : {}),
       ...(body.type !== undefined ? { type: body.type } : {}),
       ...(body.batteryCapacityKwh !== undefined
         ? { batteryCapacityKwh: body.batteryCapacityKwh }
