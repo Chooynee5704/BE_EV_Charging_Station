@@ -69,20 +69,12 @@ export async function createVnpayCheckoutUrlController(
   res: Response
 ) {
   try {
-    const { amount, orderInfo, orderId, locale, orderType, reservationId } =
-      req.body as Partial<BuildCheckoutInput> & { 
-        amount?: number | string;
-        reservationId?: string;
+    const { vehicleId, locale, orderType } =
+      req.body as { 
+        vehicleId?: string;
+        locale?: "vn" | "en";
+        orderType?: string;
       };
-
-    const amountNum = Number(amount);
-    if (!Number.isFinite(amountNum) || amountNum <= 0 || !orderInfo) {
-      return res.status(400).json({
-        success: false,
-        error: "InvalidInput",
-        message: "amount (number > 0) and orderInfo are required",
-      });
-    }
 
     // User must be authenticated to create payment
     if (!req.user?.userId) {
@@ -93,24 +85,134 @@ export async function createVnpayCheckoutUrlController(
       });
     }
 
-    // Ưu tiên dùng reservationId làm orderId (vnp_TxnRef)
-    // Nếu không có thì dùng orderId, nếu cũng không có thì VNPay service sẽ tự tạo
-    const finalOrderId = reservationId || orderId;
+    if (!vehicleId) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "vehicleId là bắt buộc",
+      });
+    }
+
+    // Import required services
+    const { Vehicle } = require("../models/vehicle.model");
+    const { ChargingSession } = require("../models/chargingsession.model");
+    const { ChargingSlot } = require("../models/chargingslot.model");
+    const { ChargingPort } = require("../models/chargingport.model");
+    const Types = require("mongoose").Types;
+
+    // Validate vehicleId
+    if (!Types.ObjectId.isValid(vehicleId)) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "vehicleId không hợp lệ",
+      });
+    }
+
+    // Check if vehicle exists and belongs to user
+    const vehicle = await Vehicle.findById(vehicleId).lean();
+    if (!vehicle) {
+      return res.status(404).json({
+        success: false,
+        error: "NotFound",
+        message: "Không tìm thấy xe",
+      });
+    }
+
+    if (String(vehicle.owner) !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Xe không thuộc sở hữu của bạn",
+      });
+    }
+
+    // Get all completed charging sessions for this vehicle
+    const completedSessions = await ChargingSession.find({
+      vehicle: vehicleId,
+      status: "completed",
+    }).populate({
+      path: "slot",
+      populate: {
+        path: "port",
+        model: "ChargingPort",
+      },
+    }).lean();
+
+    if (completedSessions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "Không có phiên sạc nào đã hoàn thành để thanh toán",
+      });
+    }
+
+    // Calculate total minutes and pricing
+    let totalMinutes = 0;
+    const sessionDetails = [];
+
+    for (const session of completedSessions) {
+      const startTime = new Date(session.startedAt).getTime();
+      const endTime = session.endedAt ? new Date(session.endedAt).getTime() : Date.now();
+      const minutes = (endTime - startTime) / 60000; // Convert to minutes
+      totalMinutes += minutes;
+
+      sessionDetails.push({
+        sessionId: String(session._id),
+        startAt: session.startedAt,
+        endAt: session.endedAt,
+        minutes: Number(minutes.toFixed(2)),
+        port: session.slot?.port,
+      });
+    }
+
+    const durationHours = totalMinutes / 60;
+
+    // Get port type from first session (assuming same type for simplicity)
+    const firstPort = sessionDetails[0]?.port;
+    let portType: "ac" | "dc" | "dc_ultra" = "ac";
     
-    // KHÔNG cho phép chọn bankCode - user sẽ chọn trên trang VNPay
+    if (firstPort) {
+      const typeStr = String(firstPort.type || "").toLowerCase();
+      if (typeStr.includes("ultra")) portType = "dc_ultra";
+      else if (typeStr.includes("dc")) portType = "dc";
+      else portType = "ac";
+    }
+
+    // Pricing calculation (matching frontend logic)
+    const BOOKING_BASE_PRICE: Record<typeof portType, number> = {
+      ac: 10000,
+      dc: 15000,
+      dc_ultra: 20000,
+    };
+    const ENERGY_PRICE_VND_PER_KWH = 3858;
+
+    // Get actual power from port (not fixed 1kW)
+    const powerKw = firstPort?.powerKw || 7;
+
+    // Calculate costs
+    const bookingCost = BOOKING_BASE_PRICE[portType]; // Fixed base price
+    const energyKwh = powerKw * durationHours; // Actual energy consumed
+    const energyCost = durationHours * energyKwh * ENERGY_PRICE_VND_PER_KWH; // Frontend formula
+    const total = Math.round(bookingCost + energyCost);
+
+    // Generate order info
+    const orderInfo = `Thanh toan ${completedSessions.length} phien sac - Xe ${vehicle.plateNumber}`;
+    const orderId = `CHARGE-${vehicleId}-${Date.now()}`;
+
+    // Create VNPay checkout URL
     const payload: BuildCheckoutInput = {
-      amount: amountNum,
-      orderInfo: String(orderInfo),
+      amount: total,
+      orderInfo,
       ipAddr: getClientIp(req),
-      ...(finalOrderId ? { orderId: String(finalOrderId) } : {}),
-      // bankCode bị loại bỏ - user chọn trên VNPay
-      ...(locale ? { locale: locale as "vn" | "en" } : {}),
+      orderId,
+      ...(locale ? { locale } : {}),
       ...(orderType ? { orderType: String(orderType) } : {}),
     };
 
     const result = buildCheckoutUrl(payload);
 
-    // Tạo giao dịch pending khi tạo URL thanh toán
+    // Create transaction record
     try {
       const vnpDetails: any = {};
       if (result.params.vnp_TxnRef) vnpDetails.vnp_TxnRef = result.params.vnp_TxnRef;
@@ -119,36 +221,56 @@ export async function createVnpayCheckoutUrlController(
 
       const txnInput: any = {
         userId: req.user.userId,
-        amount: amountNum,
+        amount: total,
         currency: "VND",
         status: "pending",
         paymentMethod: "vnpay",
-        description: String(orderInfo),
+        description: orderInfo,
         vnpayDetails: vnpDetails,
         metadata: {
           ipAddr: getClientIp(req),
-          createdFrom: "checkout_url",
-          ...(reservationId ? { reservationId } : {}),
+          createdFrom: "checkout_url_charging",
+          vehicleId,
+          sessionCount: completedSessions.length,
+          totalMinutes: Number(totalMinutes.toFixed(2)),
+          durationHours: Number(durationHours.toFixed(4)),
+          portType,
+          bookingCost,
+          energyCost,
+          sessionDetails,
         },
       };
-      
-      // Lưu reservationId vào transaction nếu có
-      if (reservationId || finalOrderId) {
-        txnInput.reservationId = reservationId || finalOrderId;
-      }
 
       await createTransaction(txnInput);
     } catch (txnErr) {
       console.error("Failed to create transaction record:", txnErr);
-      // Không dừng flow, vẫn trả về payment URL
     }
 
-    return res.status(200).json({ success: true, message: "OK", data: result });
+    return res.status(200).json({ 
+      success: true, 
+      message: "OK", 
+      data: {
+        ...result,
+        pricingDetails: {
+          totalSessions: completedSessions.length,
+          totalMinutes: Number(totalMinutes.toFixed(2)),
+          durationHours: Number(durationHours.toFixed(4)),
+          portType,
+          powerKw: Number(powerKw.toFixed(2)),
+          bookingBasePrice: bookingCost,
+          energyKwh: Number(energyKwh.toFixed(4)),
+          bookingCost,
+          energyCost,
+          total,
+          currency: "VND",
+        },
+      },
+    });
   } catch (err: any) {
     const status = err?.status || 500;
     return res.status(status).json({
       success: false,
-      error: status === 400 ? "InvalidInput" : "ServerError",
+      error: status === 400 ? "InvalidInput" : status === 404 ? "NotFound" : status === 403 ? "Forbidden" : "ServerError",
       message: err?.message || "Failed to create VNPay checkout URL",
     });
   }
@@ -228,213 +350,272 @@ export async function vnpayReturnController(
 }
 
 // POST /vnpay/check-payment-status
-// Kiểm tra trạng thái thanh toán từ VNPay return URL
 export async function checkPaymentStatusController(
   req: AuthenticatedRequest,
   res: Response
 ) {
   try {
-    // Lấy reservationId từ body (nếu có)
-    const { reservationId, ...vnpayData } = req.body;
-    
-    // Có thể nhận từ body hoặc query
-    const queryData = Object.keys(vnpayData).length > 0 ? vnpayData : req.query;
-    
-    if (!queryData || Object.keys(queryData).length === 0) {
-      return res.status(400).json({
+    const { vehicleId, reservationId, ...vnpayParams } = req.body as { 
+      vehicleId?: string;
+      reservationId?: string;
+      vnp_Amount?: string;
+      vnp_BankCode?: string;
+      vnp_BankTranNo?: string;
+      vnp_CardType?: string;
+      vnp_OrderInfo?: string;
+      vnp_PayDate?: string;
+      vnp_ResponseCode?: string;
+      vnp_TmnCode?: string;
+      vnp_TransactionNo?: string;
+      vnp_TransactionStatus?: string;
+      vnp_TxnRef?: string;
+      vnp_SecureHash?: string;
+    };
+
+    if (!req.user?.userId) {
+      return res.status(401).json({
         success: false,
-        error: "InvalidInput",
-        message: "Thiếu thông tin từ VNPay return URL",
+        error: "Unauthorized",
+        message: "Chưa đăng nhập",
       });
     }
 
-    // Verify signature
-    const verification = verifyVnpayReturn(queryData as any);
+    if (!vehicleId) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "vehicleId là bắt buộc",
+      });
+    }
+
+    // Check if we have VNPay params to verify
+    if (!vnpayParams.vnp_TxnRef || !vnpayParams.vnp_SecureHash) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "Thiếu thông tin từ VNPay (vnp_TxnRef và vnp_SecureHash là bắt buộc)",
+      });
+    }
+
+    const Types = require("mongoose").Types;
+    const { Vehicle } = require("../models/vehicle.model");
+    const { ChargingSession } = require("../models/chargingsession.model");
+    const { ChargingSlot } = require("../models/chargingslot.model");
+    const { Transaction } = require("../models/transaction.model");
+    const { Reservation } = require("../models/reservation.model");
+
+    // Validate vehicleId
+    if (!Types.ObjectId.isValid(vehicleId)) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "vehicleId không hợp lệ",
+      });
+    }
+
+    // Validate reservationId if provided
+    if (reservationId && !Types.ObjectId.isValid(reservationId)) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "reservationId không hợp lệ",
+      });
+    }
+
+    // Check if vehicle exists and belongs to user
+    const vehicle = await Vehicle.findById(vehicleId).lean();
+    if (!vehicle) {
+      return res.status(404).json({
+        success: false,
+        error: "NotFound",
+        message: "Không tìm thấy xe",
+      });
+    }
+
+    if (String(vehicle.owner) !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Xe không thuộc sở hữu của bạn",
+      });
+    }
+
+    // Verify VNPay signature
+    const verification = verifyVnpayReturn(vnpayParams as any);
 
     if (!verification.isValid) {
       return res.status(400).json({
         success: false,
         error: "InvalidSignature",
-        message: "Chữ ký không hợp lệ",
-        paymentStatus: "invalid",
+        message: "Chữ ký VNPay không hợp lệ",
+        data: {
+          paymentStatus: "invalid",
+        },
       });
     }
 
-    // Xác định trạng thái thanh toán
+    // Determine payment status from VNPay response
     const { status: paymentStatus, reason } = determineTransactionStatus(
       verification.code,
       verification.isValid
     );
 
-    // Lấy thông tin giao dịch từ database nếu có
-    const vnpTxnRef = verification.data.vnp_TxnRef;
-    const vnpAmount = verification.data.vnp_Amount 
-      ? Number(verification.data.vnp_Amount) / 100 
-      : 0;
-    
-    let transaction = vnpTxnRef ? await findTransactionByVnpTxnRef(vnpTxnRef) : null;
-    let transactionInfo = null;
-    let isNewTransaction = false;
+    // Find the transaction by vnp_TxnRef
+    const vnpTxnRef = vnpayParams.vnp_TxnRef;
+    const transaction = await findTransactionByVnpTxnRef(vnpTxnRef);
 
-    // Nếu transaction chưa tồn tại, tạo mới
-    if (!transaction && vnpTxnRef) {
-      console.log(`Creating new transaction for vnp_TxnRef: ${vnpTxnRef}`);
-      
-      try {
-        // Lấy thông tin từ VNPay response
-        const updatedVnpDetails: any = {};
-        if (verification.data.vnp_ResponseCode) updatedVnpDetails.vnp_ResponseCode = verification.data.vnp_ResponseCode;
-        if (verification.data.vnp_TransactionNo) updatedVnpDetails.vnp_TransactionNo = verification.data.vnp_TransactionNo;
-        if (verification.data.vnp_BankCode) updatedVnpDetails.vnp_BankCode = verification.data.vnp_BankCode;
-        if (verification.data.vnp_CardType) updatedVnpDetails.vnp_CardType = verification.data.vnp_CardType;
-        if (verification.data.vnp_PayDate) updatedVnpDetails.vnp_PayDate = verification.data.vnp_PayDate;
-        if (verification.data.vnp_TransactionStatus) updatedVnpDetails.vnp_TransactionStatus = verification.data.vnp_TransactionStatus;
-        updatedVnpDetails.vnp_TxnRef = vnpTxnRef;
-        if (verification.data.vnp_Amount) updatedVnpDetails.vnp_Amount = Number(verification.data.vnp_Amount);
-        if (verification.data.vnp_OrderInfo) updatedVnpDetails.vnp_OrderInfo = verification.data.vnp_OrderInfo;
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        error: "NotFound",
+        message: "Không tìm thấy giao dịch thanh toán với mã " + vnpTxnRef,
+      });
+    }
 
-        // Tạo transaction mới (cần userId - có thể extract từ txnRef hoặc để null)
-        // TODO: Cần có cách lấy userId, có thể từ session hoặc txnRef format
-        // Tạm thời skip nếu không có userId
-        console.warn("Cannot create transaction without userId");
-        isNewTransaction = false;
-      } catch (createErr) {
-        console.error("Failed to create transaction:", createErr);
-      }
-    } else if (transaction) {
-      // Transaction đã tồn tại, cập nhật status
-      console.log(`Updating existing transaction: ${transaction._id}`);
-      
-      try {
-        const updatedVnpDetails: any = { ...transaction.vnpayDetails };
-        if (verification.data.vnp_ResponseCode) updatedVnpDetails.vnp_ResponseCode = verification.data.vnp_ResponseCode;
-        if (verification.data.vnp_TransactionNo) updatedVnpDetails.vnp_TransactionNo = verification.data.vnp_TransactionNo;
-        if (verification.data.vnp_BankCode) updatedVnpDetails.vnp_BankCode = verification.data.vnp_BankCode;
-        if (verification.data.vnp_CardType) updatedVnpDetails.vnp_CardType = verification.data.vnp_CardType;
-        if (verification.data.vnp_PayDate) updatedVnpDetails.vnp_PayDate = verification.data.vnp_PayDate;
-        if (verification.data.vnp_TransactionStatus) updatedVnpDetails.vnp_TransactionStatus = verification.data.vnp_TransactionStatus;
+    // Verify the transaction belongs to this user
+    if (String(transaction.user) !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Giao dịch không thuộc về bạn",
+      });
+    }
 
-        const updatedTransaction = await updateTransaction({
+    // Verify vehicleId matches transaction metadata
+    if (transaction.metadata?.vehicleId !== vehicleId) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "vehicleId không khớp với giao dịch",
+      });
+    }
+
+    // Update transaction with VNPay details
+    const updatedVnpDetails: any = { ...transaction.vnpayDetails };
+    if (verification.data.vnp_ResponseCode) updatedVnpDetails.vnp_ResponseCode = verification.data.vnp_ResponseCode;
+    if (verification.data.vnp_TransactionNo) updatedVnpDetails.vnp_TransactionNo = verification.data.vnp_TransactionNo;
+    if (verification.data.vnp_BankCode) updatedVnpDetails.vnp_BankCode = verification.data.vnp_BankCode;
+    if (verification.data.vnp_CardType) updatedVnpDetails.vnp_CardType = verification.data.vnp_CardType;
+    if (verification.data.vnp_PayDate) updatedVnpDetails.vnp_PayDate = verification.data.vnp_PayDate;
+    if (verification.data.vnp_TransactionStatus) updatedVnpDetails.vnp_TransactionStatus = verification.data.vnp_TransactionStatus;
+
+    await updateTransaction({
+      transactionId: String(transaction._id),
+      status: paymentStatus,
+      vnpayDetails: updatedVnpDetails,
+      metadata: {
+        ...transaction.metadata,
+        updatedFrom: "check_payment_status",
+        checkTime: new Date().toISOString(),
+        ...(reservationId ? { reservationId } : {}),
+        ...(reason ? { failureReason: reason } : {}),
+      },
+    });
+
+    // If payment is NOT successful, return status without updating sessions/reservation
+    if (paymentStatus !== "success") {
+      return res.status(200).json({
+        success: true,
+        message: paymentStatus === "cancelled" ? "Thanh toán đã bị hủy" : "Thanh toán thất bại",
+        data: {
+          paymentStatus,
           transactionId: String(transaction._id),
-          status: paymentStatus,
-          vnpayDetails: updatedVnpDetails,
-          metadata: {
-            ...transaction.metadata,
-            updatedFrom: "check_payment_status",
-            checkTime: new Date().toISOString(),
-            ...(reason ? { failureReason: reason } : {}),
+          amount: transaction.amount,
+          currency: transaction.currency,
+          reason: reason || null,
+          vnpayInfo: {
+            responseCode: verification.data.vnp_ResponseCode,
+            transactionNo: verification.data.vnp_TransactionNo,
+            bankCode: verification.data.vnp_BankCode,
           },
-        });
+        },
+      });
+    }
 
-        // Cập nhật reservation status nếu có (từ transaction)
-        if (updatedTransaction.reservation) {
-          const Reservation = require("../models/reservation.model").Reservation;
-          const { generateQRCodeBase64, generateQRCheckUrl } = require("../utils/qrcode.util");
-          const resId = updatedTransaction.reservation;
-          
-          try {
-            // Success → confirmed, Failed/Cancelled → pending (giữ nguyên để user có thể thử lại)
-            const newReservationStatus = paymentStatus === "success" ? "confirmed" : "pending";
-            const updateData: any = { status: newReservationStatus };
-            
-            // Tạo QR code nếu payment success
-            if (paymentStatus === "success") {
-              const qrCheckUrl = generateQRCheckUrl(String(resId));
-              const qrCodeBase64 = await generateQRCodeBase64(qrCheckUrl);
-              updateData.qr = qrCodeBase64;
-              console.log(`Generated QR code for reservation ${resId}`);
-            }
-            
-            await Reservation.findByIdAndUpdate(resId, updateData);
-            console.log(`Updated reservation ${resId} status to ${newReservationStatus} (payment: ${paymentStatus})`);
-          } catch (resErr) {
-            console.error("Failed to update reservation status:", resErr);
-          }
-        }
+    // Payment is successful - update charging sessions, slots, and reservation
+    const completedSessions = await ChargingSession.find({
+      vehicle: vehicleId,
+      status: "completed",
+    }).populate("slot");
+
+    // Update all completed sessions to success status
+    const sessionIds = completedSessions.map((s: any) => s._id);
+    const slotIds = completedSessions
+      .map((s: any) => s.slot?._id)
+      .filter((id: any) => id !== undefined && id !== null);
+
+    if (sessionIds.length > 0) {
+      // Update sessions
+      await ChargingSession.updateMany(
+        { _id: { $in: sessionIds } },
+        { $set: { status: "success" } }
+      );
+    }
+
+    // Update slots back to available
+    let updatedSlots = 0;
+    if (slotIds.length > 0) {
+      const slotUpdateResult = await ChargingSlot.updateMany(
+        { _id: { $in: slotIds } },
+        { $set: { status: "available" } }
+      );
+      updatedSlots = slotUpdateResult.modifiedCount || 0;
+    }
+
+    // Update reservation status if reservationId provided
+    let reservationUpdated = false;
+    if (reservationId) {
+      try {
+        const reservation = await Reservation.findById(reservationId).lean();
         
-        // Cập nhật reservation status nếu có (từ request body)
-        if (reservationId && reservationId !== updatedTransaction.reservation?.toString()) {
-          const Reservation = require("../models/reservation.model").Reservation;
-          const { generateQRCodeBase64, generateQRCheckUrl } = require("../utils/qrcode.util");
-          const Types = require("mongoose").Types;
-          
-          try {
-            if (Types.ObjectId.isValid(reservationId)) {
-              const newReservationStatus = paymentStatus === "success" ? "confirmed" : "pending";
-              const updateData: any = { status: newReservationStatus };
-              
-              // Tạo QR code nếu payment success
-              if (paymentStatus === "success") {
-                const qrCheckUrl = generateQRCheckUrl(reservationId);
-                const qrCodeBase64 = await generateQRCodeBase64(qrCheckUrl);
-                updateData.qr = qrCodeBase64;
-                console.log(`Generated QR code for reservation ${reservationId}`);
-              }
-              
-              await Reservation.findByIdAndUpdate(reservationId, updateData);
-              console.log(`Updated reservation ${reservationId} status to ${newReservationStatus} (payment: ${paymentStatus})`);
-            }
-          } catch (resErr) {
-            console.error("Failed to update reservation status from request:", resErr);
+        if (reservation) {
+          // Verify reservation belongs to the vehicle
+          if (String(reservation.vehicle) === vehicleId) {
+            await Reservation.findByIdAndUpdate(reservationId, {
+              $set: { status: "payment-success" },
+            });
+            reservationUpdated = true;
+            console.log(`Updated reservation ${reservationId} status to payment-success`);
+          } else {
+            console.warn(`Reservation ${reservationId} does not belong to vehicle ${vehicleId}`);
           }
+        } else {
+          console.warn(`Reservation ${reservationId} not found`);
         }
-
-        transaction = updatedTransaction;
-      } catch (updateErr) {
-        console.error("Failed to update transaction:", updateErr);
+      } catch (resErr) {
+        console.error("Error updating reservation:", resErr);
       }
     }
 
-    // Prepare transaction info for response
-    if (transaction) {
-      transactionInfo = {
-        transactionId: String(transaction._id),
-        amount: transaction.amount,
-        description: transaction.description,
-        status: transaction.status,
-        createdAt: transaction.createdAt,
-        updatedAt: transaction.updatedAt,
-        reservationId: transaction.reservation ? String(transaction.reservation) : null,
-      };
-    }
-
-    // Trả về response chi tiết
     return res.status(200).json({
       success: true,
-      message: getVnpayErrorMessage(verification.code),
-      paymentStatus, // "success", "failed", "cancelled"
+      message: "Thanh toán thành công và đã cập nhật trạng thái",
       data: {
-        // Trạng thái
-        status: paymentStatus,
-        isSuccess: paymentStatus === "success",
-        isNewTransaction,
-        
-        // Thông tin giao dịch VNPay
+        paymentStatus: "success",
+        transactionId: String(transaction._id),
+        amount: transaction.amount,
+        currency: transaction.currency,
+        updatedSessions: sessionIds.length,
+        updatedSlots,
+        sessionIds: sessionIds.map((id: any) => String(id)),
+        slotIds: slotIds.map((id: any) => String(id)),
+        reservationUpdated,
+        ...(reservationId ? { reservationId } : {}),
         vnpayInfo: {
           responseCode: verification.data.vnp_ResponseCode,
           transactionNo: verification.data.vnp_TransactionNo,
-          txnRef: verification.data.vnp_TxnRef,
-          amount: vnpAmount,
           bankCode: verification.data.vnp_BankCode,
           cardType: verification.data.vnp_CardType,
-          orderInfo: verification.data.vnp_OrderInfo,
           payDate: verification.data.vnp_PayDate,
         },
-        
-        // Thông tin từ database
-        transaction: transactionInfo,
-        
-        // Lý do (nếu thất bại)
-        reason: reason || null,
       },
     });
-  } catch (error: any) {
-    console.error("Check payment status error:", error);
-    return res.status(500).json({
+  } catch (err: any) {
+    const status = err?.status || 500;
+    return res.status(status).json({
       success: false,
-      error: "ServerError",
-      message: error?.message || "Lỗi khi kiểm tra trạng thái thanh toán",
-      paymentStatus: "error",
+      error: status === 400 ? "InvalidInput" : status === 404 ? "NotFound" : status === 403 ? "Forbidden" : "ServerError",
+      message: err?.message || "Failed to check payment status",
     });
   }
 }

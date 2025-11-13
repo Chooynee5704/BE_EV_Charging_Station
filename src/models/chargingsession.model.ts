@@ -1,6 +1,6 @@
 import mongoose, { Schema, Model, Types, Document } from "mongoose";
 
-export type ChargingSessionStatus = "active" | "completed" | "cancelled";
+export type ChargingSessionStatus = "active" | "completed" | "cancelled" | "success";
 
 export interface IChargingSession extends Document {
   vehicle: Types.ObjectId; // ref Vehicle
@@ -36,7 +36,7 @@ const ChargingSessionSchema = new Schema<IChargingSession>(
     chargeRatePercentPerMinute: { type: Number, required: true, min: 0.1 },
     status: {
       type: String,
-      enum: ["active", "completed", "cancelled"],
+      enum: ["active", "completed", "cancelled", "success"],
       default: "active",
       required: true,
       index: true,
@@ -57,11 +57,11 @@ ChargingSessionSchema.pre("save", async function (next) {
     });
   }
 
-  // When session is completed or cancelled, set slot back to available
+  // When session is completed, cancelled, or success, set slot back to available
   if (
     !session.isNew &&
     session.isModified("status") &&
-    (session.status === "completed" || session.status === "cancelled")
+    (session.status === "completed" || session.status === "cancelled" || session.status === "success")
   ) {
     const ChargingSlot = mongoose.model("ChargingSlot");
     await ChargingSlot.findByIdAndUpdate(session.slot, {

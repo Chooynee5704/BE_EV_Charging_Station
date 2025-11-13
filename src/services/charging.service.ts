@@ -9,7 +9,6 @@ import { Vehicle } from "../models/vehicle.model";
 export type StartChargingInput = {
   vehicleId: string;
   slotId: string;
-  initialPercent: number; // 0-100
   targetPercent?: number | null; // optional
   chargeRatePercentPerMinute?: number; // default 1.0
 };
@@ -18,7 +17,6 @@ export async function startCharging(input: StartChargingInput) {
   const {
     vehicleId,
     slotId,
-    initialPercent,
     targetPercent = null,
     chargeRatePercentPerMinute = 1.0,
   } = input;
@@ -27,15 +25,6 @@ export async function startCharging(input: StartChargingInput) {
     throw Object.assign(new Error("vehicleId invalid"), { status: 400 });
   if (!Types.ObjectId.isValid(slotId))
     throw Object.assign(new Error("slotId invalid"), { status: 400 });
-  if (
-    typeof initialPercent !== "number" ||
-    initialPercent < 0 ||
-    initialPercent > 100
-  ) {
-    throw Object.assign(new Error("initialPercent must be 0..100"), {
-      status: 400,
-    });
-  }
   if (targetPercent !== null && (targetPercent <= 0 || targetPercent > 100)) {
     throw Object.assign(new Error("targetPercent must be 1..100"), {
       status: 400,
@@ -51,23 +40,18 @@ export async function startCharging(input: StartChargingInput) {
   }
 
   const [vehicle, slot] = await Promise.all([
-    Vehicle.findById(vehicleId).lean(),
+    Vehicle.findById(vehicleId),
     ChargingSlot.findById(slotId).lean(),
   ]);
   if (!vehicle)
     throw Object.assign(new Error("Vehicle not found"), { status: 404 });
   if (!slot) throw Object.assign(new Error("Slot not found"), { status: 404 });
 
-  // Check if slot is available (not booked or in_use)
-  if (slot.status === "booked") {
-    throw Object.assign(
-      new Error("Slot is booked and not available for charging"),
-      { status: 409 }
-    );
-  }
-  if (slot.status === "in_use") {
-    throw Object.assign(new Error("Slot is already in use"), { status: 409 });
-  }
+  // Get initial percent from vehicle's current pin
+  const initialPercent = vehicle.pin;
+
+  // Check if slot is available - allow "in_use" (from reservations) and "available"
+  // Only reject "inactive" slots
   if (slot.status === "inactive") {
     throw Object.assign(new Error("Slot is inactive"), { status: 400 });
   }
@@ -96,6 +80,19 @@ export async function stopCharging(
   if (!doc)
     throw Object.assign(new Error("Session not found"), { status: 404 });
   if (doc.status !== "active") return doc.toJSON();
+  
+  // Calculate final percent
+  const now = new Date();
+  const durationMs = now.getTime() - doc.startedAt.getTime();
+  const minutes = durationMs / 60000;
+  const gained = minutes * doc.chargeRatePercentPerMinute;
+  const rawPercent = doc.initialPercent + gained;
+  const capTarget = doc.targetPercent ?? 100;
+  const finalPercent = Math.max(0, Math.min(capTarget, Math.min(100, rawPercent)));
+  
+  // Update vehicle's pin
+  await Vehicle.findByIdAndUpdate(doc.vehicle, { pin: Math.round(finalPercent) });
+  
   doc.status = status;
   doc.endedAt = new Date();
   await doc.save();
@@ -120,14 +117,140 @@ export async function getChargingProgress(sessionId: string) {
 
   const isFinished = percent >= capTarget || doc.status !== "active";
 
+  // Update vehicle's pin in real-time during active charging
+  if (doc.status === "active") {
+    await Vehicle.findByIdAndUpdate(doc.vehicle, { pin: Math.round(percent) });
+  }
+
   return {
     sessionId: String(doc._id),
-    percent,
+    vehicleId: String(doc.vehicle),
+    percent: Number(percent.toFixed(2)),
     finished: isFinished,
     target: capTarget,
     ratePercentPerMinute: doc.chargeRatePercentPerMinute,
     startedAt: doc.startedAt,
     endedAt: doc.endedAt ?? null,
     status: doc.status,
+  };
+}
+
+export interface ListSessionsOptions {
+  userId: string;
+  status?: "active" | "completed" | "cancelled";
+  page?: number;
+  limit?: number;
+}
+
+export async function listUserChargingSessions(opts: ListSessionsOptions) {
+  const { userId, status, page = 1, limit = 20 } = opts;
+
+  if (!Types.ObjectId.isValid(userId)) {
+    throw Object.assign(new Error("userId invalid"), { status: 400 });
+  }
+
+  // Find all vehicles owned by the user
+  const userVehicles = await Vehicle.find({ owner: userId }, { _id: 1 }).lean();
+  const vehicleIds = userVehicles.map((v) => v._id);
+
+  if (vehicleIds.length === 0) {
+    return {
+      items: [],
+      pagination: {
+        page: 1,
+        limit,
+        total: 0,
+        pages: 0,
+      },
+    };
+  }
+
+  // Build filter
+  const filter: any = {
+    vehicle: { $in: vehicleIds },
+  };
+
+  if (status) {
+    filter.status = status;
+  }
+
+  const safeLimit = Math.max(Number(limit) || 1, 1);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const skip = (safePage - 1) * safeLimit;
+
+  const [sessions, total] = await Promise.all([
+    ChargingSession.find(filter)
+      .sort({ startedAt: -1 })
+      .skip(skip)
+      .limit(safeLimit)
+      .populate("vehicle")
+      .populate("slot")
+      .lean(),
+    ChargingSession.countDocuments(filter),
+  ]);
+
+  return {
+    items: sessions,
+    pagination: {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      pages: Math.ceil(total / safeLimit),
+    },
+  };
+}
+
+export interface ListSessionsByVehicleOptions {
+  vehicleId: string;
+  status?: "active" | "completed" | "cancelled";
+  page?: number;
+  limit?: number;
+}
+
+export async function listChargingSessionsByVehicle(opts: ListSessionsByVehicleOptions) {
+  const { vehicleId, status, page = 1, limit = 20 } = opts;
+
+  if (!Types.ObjectId.isValid(vehicleId)) {
+    throw Object.assign(new Error("vehicleId invalid"), { status: 400 });
+  }
+
+  // Check if vehicle exists
+  const vehicle = await Vehicle.findById(vehicleId).lean();
+  if (!vehicle) {
+    throw Object.assign(new Error("Vehicle not found"), { status: 404 });
+  }
+
+  // Build filter
+  const filter: any = {
+    vehicle: new Types.ObjectId(vehicleId),
+  };
+
+  if (status) {
+    filter.status = status;
+  }
+
+  const safeLimit = Math.max(Number(limit) || 1, 1);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const skip = (safePage - 1) * safeLimit;
+
+  const [sessions, total] = await Promise.all([
+    ChargingSession.find(filter)
+      .sort({ startedAt: -1 })
+      .skip(skip)
+      .limit(safeLimit)
+      .populate("vehicle")
+      .populate("slot")
+      .lean(),
+    ChargingSession.countDocuments(filter),
+  ]);
+
+  return {
+    items: sessions,
+    pagination: {
+      page: safePage,
+      limit: safeLimit,
+      total,
+      pages: Math.ceil(total / safeLimit),
+    },
   };
 }
