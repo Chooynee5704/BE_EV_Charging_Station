@@ -6,6 +6,7 @@ import {
   CreateUserInput,
   updateUserProfile,
   changePassword,
+  getUserById as getUserByIdService,
 } from "../services/user.service";
 import { AuthenticatedRequest } from "../types";
 import { User } from "../models/user.model";
@@ -306,6 +307,35 @@ export async function updateUserProfileController(
           : status === 400
           ? "InvalidInput"
           : "ServerError",
+      message,
+    });
+  }
+}
+
+export async function getUserByIdController(req: Request, res: Response) {
+  try {
+    const { userId } = req.params;
+
+    if (!userId || typeof userId !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "userId parameter is required",
+      });
+    }
+
+    const user = await getUserByIdService(userId);
+    return res.status(200).json({
+      success: true,
+      message: "User retrieved",
+      data: user,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    const message = error?.message || "Internal Server Error";
+    return res.status(status).json({
+      success: false,
+      error: status === 404 ? "NotFound" : status === 400 ? "InvalidInput" : "ServerError",
       message,
     });
   }
