@@ -7,6 +7,7 @@ import {
   updateUserProfileController,
   changePasswordController,
   getUserByIdController,
+  updateUserDetailController,
 } from "../controllers/user.controller";
 import {
   authenticateToken,
@@ -254,6 +255,63 @@ router.get(
  *     responses:
  *       200: { description: User retrieved }
  *       400: { description: Invalid userId }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (not admin) }
+ *       404: { description: User not found }
+ *       500: { description: Server error }
+ */
+
+router.put(
+  "/detail/:userId",
+  authenticateToken,
+  authorizeRoles("admin"),
+  updateUserDetailController
+);
+/**
+ * @swagger
+ * /users/detail/{userId}:
+ *   put:
+ *     tags: [Users]
+ *     summary: Update a user by ID (admin only)
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string, example: "66f8b2ab1f4c3f6e9f123456" }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               username: { type: string }
+ *               email: { type: string, format: email }
+ *               phone: { type: string }
+ *               fullName: { type: string }
+ *               dob: { type: string, format: date }
+ *               address:
+ *                 oneOf:
+ *                   - { type: string }
+ *                   - { type: "null" }
+ *                   - type: object
+ *                     properties:
+ *                       line1: { type: string }
+ *                       line2: { type: string }
+ *                       ward: { type: string }
+ *                       district: { type: string }
+ *                       city: { type: string }
+ *                       province: { type: string }
+ *                       country: { type: string }
+ *                       postalCode: { type: string }
+ *               status:
+ *                 type: string
+ *                 enum: [active, disabled]
+ *                 description: Admin only
+ *     responses:
+ *       200: { description: User updated }
+ *       400: { description: Invalid input }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden (not admin) }
  *       404: { description: User not found }
