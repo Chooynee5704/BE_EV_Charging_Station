@@ -10,6 +10,7 @@ import {
   cancelReservationController,
   completeReservationController,
   qrCheckController,
+  streamReservationInfoController,
 } from "../controllers/reservation.controller";
 
 const router = Router();
@@ -30,6 +31,8 @@ const router = Router();
  *     description: |
  *       Create a reservation **for a specific vehicle** with one or more slot/time ranges.
  *       - **vehicleId is required** and must belong to the current user (unless admin/staff).
+ *       - **Generates a QR code** (base64) with hashed reservation ID for check-in verification.
+ *       - The QR code contains: { reservationId, hash } where hash is HMAC-SHA256 of reservationId.
  *     security: [ { bearerAuth: [] } ]
  *     requestBody:
  *       required: true
@@ -76,7 +79,24 @@ const router = Router();
  *                 endAt: "2025-10-02T10:30:00Z"
  *             status: pending
  *     responses:
- *       201: { description: Reservation created }
+ *       201: 
+ *         description: Reservation created with QR code
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "Reservation created" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     vehicle: { type: string }
+ *                     items: { type: array }
+ *                     status: { type: string, example: "pending" }
+ *                     qrCheck: { type: boolean, example: false }
+ *                     qr: { type: string, description: "Base64 QR code image (data:image/png;base64,...)" }
  *       400: { description: Invalid input }
  *       404: { description: Vehicle/Slot not found }
  *       409: { description: Time overlap conflict }
@@ -202,10 +222,15 @@ router.patch(
  *     summary: Check-in reservation using QR code (Staff/Admin only)
  *     description: |
  *       Staff hoặc Admin scan QR code để check-in reservation.
- *       - Chỉ reservation có status = "confirmed" mới được check-in
- *       - Nếu qrCheck = false và status = confirmed → update qrCheck = true, return success
+ *       
+ *       **Flow mới:**
+ *       - QR code chứa { reservationId, hash } - hash được tạo bằng HMAC-SHA256 với HASH_PASSWORD_KEY
+ *       - Hệ thống verify hash để đảm bảo QR code hợp lệ
+ *       - Chỉ reservation có **status = "pending"** mới được check-in
+ *       - Nếu qrCheck = false và status = pending → update status = "confirmed" và qrCheck = true
  *       - Nếu qrCheck = true → return "QR code đã được sử dụng"
- *       - Nếu status ≠ confirmed → return "Reservation chưa thanh toán"
+ *       - Nếu status ≠ pending → return "Reservation có trạng thái {status}, không thể check-in"
+ *       - Nếu hash không hợp lệ → return "QR code không hợp lệ"
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -214,12 +239,16 @@ router.patch(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [reservationId]
+ *             required: [reservationId, hash]
  *             properties:
  *               reservationId:
  *                 type: string
  *                 description: ID của reservation cần check-in
  *                 example: "670abc123def456ghi789jkl"
+ *               hash:
+ *                 type: string
+ *                 description: HMAC-SHA256 hash của reservationId (từ QR code)
+ *                 example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
  *     responses:
  *       200:
  *         description: Check-in thành công hoặc QR đã được sử dụng
@@ -247,7 +276,7 @@ router.patch(
  *                         userId: { type: string }
  *                         role: { type: string, example: "staff" }
  *       400:
- *         description: Reservation chưa thanh toán hoặc dữ liệu không hợp lệ
+ *         description: QR code không hợp lệ, reservation không phải pending, hoặc dữ liệu không hợp lệ
  *       403:
  *         description: Không có quyền (chỉ staff/admin)
  *       404:
@@ -258,6 +287,51 @@ router.post(
   authenticateToken,
   authorizeRoles("admin", "staff"),
   qrCheckController
+);
+
+/**
+ * @swagger
+ * /reservations/{id}/stream:
+ *   get:
+ *     tags: [Reservations]
+ *     summary: Stream reservation information in real-time (SSE)
+ *     description: |
+ *       Stream reservation details including:
+ *       - Reservation status and QR check status
+ *       - Vehicle information
+ *       - All slot/time range items with port details
+ *       - Total duration (minutes and hours)
+ *       - Real-time status updates every 3 seconds
+ *       
+ *       **Events:**
+ *       - `reservation_info`: Initial full reservation data
+ *       - `status_update`: Status changes (status, qrCheck)
+ *       - `stream_end`: Stream ended (when completed/cancelled/payment-success)
+ *       
+ *       Updates are sent every 1 second.
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Reservation ID
+ *     responses:
+ *       200:
+ *         description: Server-Sent Events stream
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *       400: { description: Invalid reservationId }
+ *       403: { description: Forbidden - not your reservation }
+ *       404: { description: Reservation not found }
+ */
+router.get(
+  "/:id/stream",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  streamReservationInfoController
 );
 
 export default router;

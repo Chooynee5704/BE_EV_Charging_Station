@@ -1,25 +1,23 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../types";
-import { startCharging, getChargingProgress, stopCharging } from "../services/charging.service";
+import { startCharging, getChargingProgress, stopCharging, listUserChargingSessions, listChargingSessionsByVehicle } from "../services/charging.service";
 
 export async function startChargingController(req: AuthenticatedRequest, res: Response) {
   try {
-    const { vehicleId, slotId, initialPercent, targetPercent, chargeRatePercentPerMinute } = req.body as {
+    const { vehicleId, slotId, targetPercent, chargeRatePercentPerMinute } = req.body as {
       vehicleId?: string;
       slotId?: string;
-      initialPercent?: number;
       targetPercent?: number | null;
       chargeRatePercentPerMinute?: number;
     };
 
-    if (!vehicleId || !slotId || initialPercent === undefined) {
-      return res.status(400).json({ error: "InvalidInput", message: "vehicleId, slotId, initialPercent are required" });
+    if (!vehicleId || !slotId) {
+      return res.status(400).json({ error: "InvalidInput", message: "vehicleId and slotId are required" });
     }
 
     const session = await startCharging({
       vehicleId,
       slotId,
-      initialPercent,
       ...(targetPercent !== undefined ? { targetPercent } : {}),
       ...(chargeRatePercentPerMinute !== undefined ? { chargeRatePercentPerMinute } : {}),
     });
@@ -83,6 +81,84 @@ export async function streamChargingProgressController(req: AuthenticatedRequest
   } catch (error: any) {
     const s = error?.status || 500;
     res.status(s).json({ error: s === 404 ? "NotFound" : s === 400 ? "InvalidInput" : "ServerError", message: error?.message || "Internal Server Error" });
+  }
+}
+
+export async function listMyChargingSessionsController(req: AuthenticatedRequest, res: Response) {
+  try {
+    if (!req.user?.userId) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+    }
+
+    const { status, page, limit } = req.query as {
+      status?: "active" | "completed" | "cancelled";
+      page?: string;
+      limit?: string;
+    };
+
+    const result = await listUserChargingSessions({
+      userId: req.user.userId,
+      ...(status ? { status } : {}),
+      ...(page ? { page: Number(page) } : {}),
+      ...(limit ? { limit: Number(limit) } : {}),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "OK",
+      data: result,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    return res.status(status).json({
+      success: false,
+      error: status === 400 ? "InvalidInput" : "ServerError",
+      message: error?.message || "Internal Server Error",
+    });
+  }
+}
+
+export async function listChargingSessionsByVehicleController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { vehicleId } = req.params as { vehicleId: string };
+
+    if (!vehicleId) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "vehicleId is required",
+      });
+    }
+
+    const { status, page, limit } = req.query as {
+      status?: "active" | "completed" | "cancelled";
+      page?: string;
+      limit?: string;
+    };
+
+    const result = await listChargingSessionsByVehicle({
+      vehicleId,
+      ...(status ? { status } : {}),
+      ...(page ? { page: Number(page) } : {}),
+      ...(limit ? { limit: Number(limit) } : {}),
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "OK",
+      data: result,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    return res.status(status).json({
+      success: false,
+      error: status === 400 ? "InvalidInput" : status === 404 ? "NotFound" : "ServerError",
+      message: error?.message || "Internal Server Error",
+    });
   }
 }
 

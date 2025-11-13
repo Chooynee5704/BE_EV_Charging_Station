@@ -14,18 +14,18 @@ export interface EstimateCostResult {
   portId: string;
   portType: "AC" | "DC" | "DC Ultra";
   durationHours: number;
-  powerKwUsed: number; // công suất thực dùng trong tính toán
-  bookingRatePerHour: number; // VND/h
+  powerKwUsed: number; // công suất thực dùng trong tính toán (actual port power)
+  bookingBasePrice: number; // VND (fixed base price)
   energyPricePerKwh: number; // VND/kWh
   energyKwh: number;
-  bookingCost: number; // VND
+  bookingCost: number; // VND (same as base price)
   energyCost: number; // VND
   total: number; // VND
   currency: "VND";
 }
 
-// Bảng giá đặt lịch theo giờ
-const BOOKING_RATE: Record<PortKind, number> = {
+// Bảng giá cơ bản đặt lịch (fixed, không phụ thuộc giờ)
+const BOOKING_BASE_PRICE: Record<PortKind, number> = {
   ac: 10000,
   dc: 15000,
   dc_ultra: 20000,
@@ -103,11 +103,19 @@ export async function estimateCost(
   const { kind, powerKwUsed } = extractPortInfo(port, assumePowerKw);
   const durationHours = (end.getTime() - start.getTime()) / 3600000; // ms -> h
 
-  const bookingRatePerHour = BOOKING_RATE[kind];
+  // Use actual power from port (matching VNPay payment logic)
+  const actualPowerKw = powerKwUsed;
+
+  const bookingBasePrice = BOOKING_BASE_PRICE[kind]; // Fixed base price
   const energyPricePerKwh = ENERGY_PRICE_VND_PER_KWH;
 
-  const energyKwh = powerKwUsed * durationHours;
-  const bookingCost = bookingRatePerHour * durationHours;
+  // Energy calculation: actual power × hours
+  const energyKwh = actualPowerKw * durationHours;
+  
+  // Booking cost is the fixed base price (not multiplied by hours)
+  const bookingCost = bookingBasePrice;
+  
+  // Energy cost: price per kWh × total kWh
   const energyCost = energyPricePerKwh * energyKwh;
 
   const bookingCostVnd = Math.round(bookingCost);
@@ -118,8 +126,8 @@ export async function estimateCost(
     portId,
     portType: kind === "ac" ? "AC" : kind === "dc" ? "DC" : "DC Ultra",
     durationHours: Number(durationHours.toFixed(4)),
-    powerKwUsed: Number(powerKwUsed.toFixed(4)),
-    bookingRatePerHour,
+    powerKwUsed: actualPowerKw,
+    bookingBasePrice,
     energyPricePerKwh,
     energyKwh: Number(energyKwh.toFixed(4)),
     bookingCost: bookingCostVnd,

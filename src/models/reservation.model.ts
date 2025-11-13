@@ -4,7 +4,8 @@ export type ReservationStatus =
   | "pending"
   | "confirmed"
   | "cancelled"
-  | "completed";
+  | "completed"
+  | "payment-success";
 
 export interface IReservationItem {
   slot: Types.ObjectId; // ref -> ChargingSlot
@@ -54,7 +55,7 @@ const ReservationSchema: Schema<IReservation> = new Schema<IReservation>(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "cancelled", "completed"],
+      enum: ["pending", "confirmed", "cancelled", "completed", "payment-success"],
       default: "pending",
       required: true,
       index: true,

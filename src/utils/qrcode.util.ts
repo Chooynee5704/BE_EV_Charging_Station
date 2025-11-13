@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import crypto from "crypto";
 
 /**
  * Generate QR code as base64 string
@@ -24,17 +25,53 @@ export async function generateQRCodeBase64(data: string): Promise<string> {
 }
 
 /**
- * Generate QR code check URL for reservation
+ * Hash reservation ID using HASH_PASSWORD_KEY
  * @param reservationId - ID of the reservation
- * @param baseUrl - Base URL of the frontend (e.g., https://fe-ev-charging-station.vercel.app)
- * @returns Full URL for QR check endpoint
+ * @returns Hashed string
  */
-export function generateQRCheckUrl(
-  reservationId: string,
-  baseUrl: string = process.env.FRONTEND_URL || "https://fe-ev-charging-station.vercel.app"
-): string {
-  // Remove trailing slash if exists
-  const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
-  return `${cleanBaseUrl}/reservations/qr-check?reservationId=${reservationId}`;
+export function hashReservationId(reservationId: string): string {
+  const secret = process.env.HASH_PASSWORD_KEY || "default_secret_key";
+  return crypto
+    .createHmac("sha256", secret)
+    .update(reservationId)
+    .digest("hex");
 }
+
+/**
+ * Verify hashed reservation ID
+ * @param reservationId - Original reservation ID
+ * @param hash - Hashed string to verify
+ * @returns Boolean indicating if hash matches
+ */
+export function verifyReservationHash(reservationId: string, hash: string): boolean {
+  const expectedHash = hashReservationId(reservationId);
+  return crypto.timingSafeEqual(
+    Buffer.from(expectedHash),
+    Buffer.from(hash)
+  );
+}
+
+/**
+ * Generate QR code data with hashed reservation ID
+ * @param reservationId - ID of the reservation
+ * @returns JSON string containing reservation ID and hash
+ */
+export function generateQRData(reservationId: string): string {
+  const hash = hashReservationId(reservationId);
+  return JSON.stringify({
+    reservationId,
+    hash,
+  });
+}
+
+/**
+ * Generate QR code for reservation
+ * @param reservationId - ID of the reservation
+ * @returns Base64 QR code image
+ */
+export async function generateReservationQRCode(reservationId: string): Promise<string> {
+  const qrData = generateQRData(reservationId);
+  return generateQRCodeBase64(qrData);
+}
+
 

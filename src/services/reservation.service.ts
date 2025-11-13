@@ -2,6 +2,7 @@ import mongoose, { Types, HydratedDocument } from "mongoose";
 import { Reservation, IReservation } from "../models/reservation.model";
 import { ChargingSlot } from "../models/chargingslot.model";
 import { Vehicle } from "../models/vehicle.model";
+import { generateReservationQRCode } from "../utils/qrcode.util";
 
 export type BookItemInput = {
   slotId: string;
@@ -144,6 +145,16 @@ export async function createReservation(input: CreateReservationInput) {
         status,
       });
       const savedDoc = await doc.save({ session });
+
+      // Generate QR code for the reservation
+      try {
+        const qrCode = await generateReservationQRCode(String(savedDoc._id));
+        savedDoc.qr = qrCode;
+        await savedDoc.save({ session });
+      } catch (qrError) {
+        console.error("Failed to generate QR code:", qrError);
+        // Continue without QR code - not critical
+      }
 
       // Update slot status to "booked" for all slots in the reservation
       const slotIdsToUpdate = normalized.map((i) => i.slot);

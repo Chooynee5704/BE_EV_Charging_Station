@@ -13,6 +13,7 @@ export interface IVehicle {
   type?: VehicleType; // Loại xe
   batteryCapacityKwh?: number; // (optional)
   connectorType?: string; // ví dụ: DC, Ultra, Type2,...
+  pin: number; // Battery percentage (0-100%)
   status: VehicleStatus; // active/inactive
   createdAt: Date;
   updatedAt: Date;
@@ -44,6 +45,13 @@ const VehicleSchema = new Schema<IVehicle>(
     },
     batteryCapacityKwh: { type: Number, min: 0 },
     connectorType: { type: String, trim: true },
+    pin: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
     status: {
       type: String,
       enum: ["active", "inactive"],
