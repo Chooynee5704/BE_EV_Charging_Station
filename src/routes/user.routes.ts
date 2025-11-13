@@ -6,6 +6,7 @@ import {
   getUserProfileController,
   updateUserProfileController,
   changePasswordController,
+  getUserByIdController,
 } from "../controllers/user.controller";
 import {
   authenticateToken,
@@ -229,6 +230,33 @@ router.get(
  *       200: { description: OK }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden (not admin) }
+ *       500: { description: Server error }
+ */
+
+router.get(
+  "/detail/:userId",
+  authenticateToken,
+  authorizeRoles("admin"),
+  getUserByIdController
+);
+/**
+ * @swagger
+ * /users/detail/{userId}:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get a user by ID (admin only)
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string, example: "66f8b2ab1f4c3f6e9f123456" }
+ *     responses:
+ *       200: { description: User retrieved }
+ *       400: { description: Invalid userId }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (not admin) }
+ *       404: { description: User not found }
  *       500: { description: Server error }
  */
 
