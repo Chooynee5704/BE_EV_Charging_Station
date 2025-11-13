@@ -1,5 +1,6 @@
 ﻿import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { Types } from "mongoose";
 import { User, UserRole, UserStatus } from "../models/user.model";
 
 type PartialAddress =
@@ -350,6 +351,37 @@ export async function getAllUsers() {
       phone: user.phone ?? null,
     };
   });
+}
+
+export async function getUserById(userId: string) {
+  if (!Types.ObjectId.isValid(userId)) {
+    const err = new Error("Invalid userId");
+    (err as any).status = 400;
+    throw err;
+  }
+
+  const user = await User.findById(userId).lean();
+  if (!user) {
+    const err = new Error("User not found");
+    (err as any).status = 404;
+    throw err;
+  }
+
+  const profile = user.profile ?? {};
+  const status: UserStatus =
+    user?.status === "disabled" ? "disabled" : "active";
+
+  return {
+    userId: user._id.toString(),
+    username: user.username,
+    role: user.role || "user",
+    status,
+    email: user.email ?? null,
+    fullName: profile.fullName ?? null,
+    dob: profile.dob ? new Date(profile.dob).toISOString() : null,
+    address: profile.address ?? null,
+    phone: user.phone ?? null,
+  };
 }
 
 export async function loginUser(input: LoginUserInput): Promise<LoginResponse> {
