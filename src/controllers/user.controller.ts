@@ -419,3 +419,102 @@ export async function changePasswordController(
     });
   }
 }
+
+export async function updateUserDetailController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  try {
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Forbidden",
+        message: "Only admins can update user details",
+      });
+    }
+
+    const { userId } = req.params;
+    if (!userId || typeof userId !== "string" || !userId.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "userId parameter is required",
+      });
+    }
+
+    const {
+      username,
+      email,
+      phone,
+      fullName,
+      dob,
+      address,
+      status,
+    } = req.body as {
+      username?: string;
+      email?: string;
+      phone?: string | null;
+      fullName?: string;
+      dob?: string | null;
+      address?: any | null;
+      status?: string;
+    };
+
+    const input: any = {
+      userId: userId.trim(),
+      requesterRole: req.user.role,
+    };
+
+    if (username !== undefined) input.username = username;
+    if (email !== undefined) input.email = email;
+    if (phone !== undefined) input.phone = phone;
+    if (fullName !== undefined) input.fullName = fullName;
+    if (dob !== undefined) input.dob = dob;
+    if (address !== undefined) input.address = address;
+
+    if (status !== undefined) {
+      if (typeof status !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "status must be a string",
+        });
+      }
+
+      const normalizedStatus = status.trim().toLowerCase();
+      if (normalizedStatus !== "active" && normalizedStatus !== "disabled") {
+        return res.status(400).json({
+          success: false,
+          error: "InvalidInput",
+          message: "status must be either 'active' or 'disabled'",
+        });
+      }
+
+      input.status = normalizedStatus;
+    }
+
+    const updated = await updateUserProfile(input);
+
+    return res.status(200).json({
+      success: true,
+      message: "User updated",
+      data: updated,
+    });
+  } catch (error: any) {
+    console.error("Update user detail error:", error);
+    const status = error?.status || 500;
+    const message = error?.message || "Unexpected server error";
+    return res.status(status).json({
+      success: false,
+      error:
+        status === 409
+          ? "Conflict"
+          : status === 404
+          ? "NotFound"
+          : status === 400
+          ? "InvalidInput"
+          : "ServerError",
+      message,
+    });
+  }
+}
