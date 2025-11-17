@@ -17,6 +17,7 @@ import {
   addSlotToPortController,
   updateSlotController,
   deleteSlotController,
+  resetAllSlotsToAvailableController,
 } from "../controllers/chargingstation.controller";
 import {
   authenticateToken,
@@ -373,6 +374,26 @@ router.delete(
 );
 
 /* ======================== Slot routes (RELATIVE) ======================== */
+
+/**
+ * @swagger
+ * /stations/slots/reset-to-available:
+ *   patch:
+ *     tags: [ChargingSlots]
+ *     summary: Reset ALL charging slots to available (admin only)
+ *     description: Sets status to available and clears nextAvailableAt for every slot except those marked inactive.
+ *     security: [ { bearerAuth: [] } ]
+ *     responses:
+ *       200: { description: OK }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
+router.patch(
+  "/slots/reset-to-available",
+  authenticateToken,
+  authorizeRoles("admin"),
+  resetAllSlotsToAvailableController
+);
 
 /**
  * @swagger

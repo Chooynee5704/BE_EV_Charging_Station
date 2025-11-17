@@ -23,6 +23,7 @@ import {
   deleteSlot,
   listSlotsByPort,
   getSlotById,
+  resetAllSlotsToAvailable,
 } from "../services/chargingstation.service";
 
 /* =================== Station controllers =================== */
@@ -401,6 +402,27 @@ export async function deleteSlotController(req: Request, res: Response) {
     return res.status(status).json({
       success: false,
       error: status === 404 ? "NotFound" : "ServerError",
+      message: error?.message || "Internal Server Error",
+    });
+  }
+}
+
+export async function resetAllSlotsToAvailableController(
+  _req: Request,
+  res: Response
+) {
+  try {
+    const result = await resetAllSlotsToAvailable();
+    return res.status(200).json({
+      success: true,
+      message: "All non-inactive slots set to available",
+      data: result,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    return res.status(status).json({
+      success: false,
+      error: "ServerError",
       message: error?.message || "Internal Server Error",
     });
   }

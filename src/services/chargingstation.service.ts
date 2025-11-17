@@ -872,3 +872,17 @@ export async function deleteSlot(slotId: string) {
   }
   return deleted.toJSON();
 }
+
+export async function resetAllSlotsToAvailable() {
+  const result = await ChargingSlot.updateMany(
+    { status: { $ne: "inactive" } },
+    { $set: { status: "available", nextAvailableAt: null } }
+  );
+
+  return {
+    matchedCount:
+      (result as any).matchedCount ?? (result as any).n ?? 0,
+    modifiedCount:
+      (result as any).modifiedCount ?? (result as any).nModified ?? 0,
+  };
+}
