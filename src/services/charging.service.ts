@@ -80,7 +80,7 @@ export async function stopCharging(
   if (!doc)
     throw Object.assign(new Error("Session not found"), { status: 404 });
   if (doc.status !== "active") return doc.toJSON();
-  
+
   // Calculate final percent
   const now = new Date();
   const durationMs = now.getTime() - doc.startedAt.getTime();
@@ -89,14 +89,32 @@ export async function stopCharging(
   const rawPercent = doc.initialPercent + gained;
   const capTarget = doc.targetPercent ?? 100;
   const finalPercent = Math.max(0, Math.min(capTarget, Math.min(100, rawPercent)));
-  
+
   // Update vehicle's pin
   await Vehicle.findByIdAndUpdate(doc.vehicle, { pin: Math.round(finalPercent) });
-  
+
   doc.status = status;
   doc.endedAt = new Date();
   await doc.save();
   return doc.toJSON();
+}
+
+/**
+ * Helper function to calculate current battery percentage for a charging session
+ */
+export function calculateCurrentPercent(session: any): number {
+  const now = new Date();
+  const startedAt = session.startedAt instanceof Date ? session.startedAt : new Date(session.startedAt);
+  const endedAt = session.endedAt ? (session.endedAt instanceof Date ? session.endedAt : new Date(session.endedAt)) : now;
+
+  const durationMs = endedAt.getTime() - startedAt.getTime();
+  const minutes = durationMs / 60000;
+
+  const gained = minutes * session.chargeRatePercentPerMinute;
+  const rawPercent = session.initialPercent + gained;
+  const capTarget = session.targetPercent ?? 100;
+
+  return Math.max(0, Math.min(capTarget, Math.min(100, rawPercent)));
 }
 
 export async function getChargingProgress(sessionId: string) {
@@ -106,15 +124,8 @@ export async function getChargingProgress(sessionId: string) {
   if (!doc)
     throw Object.assign(new Error("Session not found"), { status: 404 });
 
-  const now = new Date();
-  const durationMs = (doc.endedAt ?? now).getTime() - doc.startedAt.getTime();
-  const minutes = durationMs / 60000;
-
-  const gained = minutes * doc.chargeRatePercentPerMinute;
-  const rawPercent = doc.initialPercent + gained;
+  const percent = calculateCurrentPercent(doc);
   const capTarget = doc.targetPercent ?? 100;
-  const percent = Math.max(0, Math.min(capTarget, Math.min(100, rawPercent)));
-
   const isFinished = percent >= capTarget || doc.status !== "active";
 
   // Update vehicle's pin in real-time during active charging
@@ -197,8 +208,29 @@ export async function listUserChargingSessions(opts: ListSessionsOptions) {
     ChargingSession.countDocuments(filter),
   ]);
 
+  // Add currentPercent to each session
+  const sessionsWithProgress = sessions.map((session: any) => {
+    let currentPercent: number;
+
+    if (session.status === 'active') {
+      // For active sessions, calculate current progress
+      currentPercent = calculateCurrentPercent(session);
+    } else if (session.status === 'completed' || session.status === 'success') {
+      // For completed sessions, use target or 100%
+      currentPercent = session.targetPercent ?? 100;
+    } else {
+      // For cancelled sessions, use initial percent
+      currentPercent = session.initialPercent;
+    }
+
+    return {
+      ...session,
+      currentPercent: Number(currentPercent.toFixed(2)),
+    };
+  });
+
   return {
-    items: sessions,
+    items: sessionsWithProgress,
     pagination: {
       page: safePage,
       limit: safeLimit,
