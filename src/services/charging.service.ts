@@ -294,3 +294,53 @@ export async function listChargingSessionsByVehicle(opts: ListSessionsByVehicleO
     },
   };
 }
+
+export interface GetSessionByIdOptions {
+  sessionId: string;
+  userId?: string;
+  isAdminOrStaff?: boolean;
+}
+
+export async function getChargingSessionById(opts: GetSessionByIdOptions) {
+  const { sessionId, userId, isAdminOrStaff = false } = opts;
+
+  if (!Types.ObjectId.isValid(sessionId)) {
+    throw Object.assign(new Error("sessionId invalid"), { status: 400 });
+  }
+
+  const session = await ChargingSession.findById(sessionId)
+    .populate("vehicle")
+    .populate({
+      path: "slot",
+      populate: { path: "port", populate: { path: "station" } },
+    })
+    .lean();
+
+  if (!session) {
+    throw Object.assign(new Error("Session not found"), { status: 404 });
+  }
+
+  // Check authorization - user must own the vehicle or be admin/staff
+  if (!isAdminOrStaff && userId) {
+    const vehicle = session.vehicle as any;
+    if (vehicle?.owner?.toString() !== userId) {
+      throw Object.assign(new Error("Unauthorized - not your vehicle"), { status: 403 });
+    }
+  }
+
+  // Add currentPercent calculation
+  let currentPercent: number;
+
+  if (session.status === 'active') {
+    currentPercent = calculateCurrentPercent(session);
+  } else if (session.status === 'completed' || session.status === 'success') {
+    currentPercent = session.targetPercent ?? 100;
+  } else {
+    currentPercent = session.initialPercent;
+  }
+
+  return {
+    ...session,
+    currentPercent: Number(currentPercent.toFixed(2)),
+  };
+}

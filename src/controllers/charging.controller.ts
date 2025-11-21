@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../types";
-import { startCharging, getChargingProgress, stopCharging, listUserChargingSessions, listChargingSessionsByVehicle } from "../services/charging.service";
+import { startCharging, getChargingProgress, stopCharging, listUserChargingSessions, listChargingSessionsByVehicle, getChargingSessionById } from "../services/charging.service";
 
 export async function startChargingController(req: AuthenticatedRequest, res: Response) {
   try {
@@ -118,7 +118,7 @@ export async function listMyChargingSessionsController(req: AuthenticatedRequest
     const status = error?.status || 500;
     return res.status(status).json({
       success: false,
-      error: status === 400 ? "InvalidInput" : "ServerError",
+      error: status === 400 ? "Invalid Input" : "ServerError",
       message: error?.message || "Internal Server Error",
     });
   }
@@ -164,4 +164,45 @@ export async function listChargingSessionsByVehicleController(req: Authenticated
   }
 }
 
+export async function getChargingSessionByIdController(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { id } = req.params as { id: string };
 
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "InvalidInput",
+        message: "Session ID is required",
+      });
+    }
+
+    if (!req.user?.userId) {
+      return res.status(401).json({
+        success: false,
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+    }
+
+    const isAdminOrStaff = req.user.role === "admin" || req.user.role === "staff";
+
+    const session = await getChargingSessionById({
+      sessionId: id,
+      userId: req.user.userId,
+      isAdminOrStaff,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "OK",
+      data: session,
+    });
+  } catch (error: any) {
+    const status = error?.status || 500;
+    return res.status(status).json({
+      success: false,
+      error: status === 400 ? "InvalidInput" : status === 403 ? "Forbidden" : status === 404 ? "NotFound" : "ServerError",
+      message: error?.message || "Internal Server Error",
+    });
+  }
+}

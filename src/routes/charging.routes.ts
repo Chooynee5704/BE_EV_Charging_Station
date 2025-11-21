@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticateToken, authorizeRoles } from "../middleware/auth.middleware";
-import { startChargingController, streamChargingProgressController, stopChargingController, listMyChargingSessionsController, listChargingSessionsByVehicleController } from "../controllers/charging.controller";
+import { startChargingController, streamChargingProgressController, stopChargingController, listMyChargingSessionsController, listChargingSessionsByVehicleController, getChargingSessionByIdController } from "../controllers/charging.controller";
 
 const router = Router();
 
@@ -219,6 +219,43 @@ router.post(
   authenticateToken,
   authorizeRoles("admin", "staff", "user"),
   startChargingController
+);
+
+/**
+ * @swagger
+ * /charging/sessions/{id}:
+ *   get:
+ *     tags: [Charging]
+ *     summary: Get charging session by ID
+ *     description: Returns detailed information about a specific charging session
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Charging session ID
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "OK" }
+ *                 data: { type: object }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden - not your vehicle }
+ *       404: { description: NotFound }
+ */
+router.get(
+  "/sessions/:id",
+  authenticateToken,
+  authorizeRoles("admin", "staff", "user"),
+  getChargingSessionByIdController
 );
 
 /**
