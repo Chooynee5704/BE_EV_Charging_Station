@@ -128,9 +128,14 @@ export async function listMyReservationsController(
       vehicleId?: any;
     };
 
+    const role = req.user.role;
+    const isAdminOrStaff = role === "admin" || role === "staff";
+
     const result = await listReservations({
       ...(vehicleId
         ? { vehicleId: String(vehicleId) }
+        : isAdminOrStaff
+        ? { forAll: true }
         : { ownerUserId: req.user.userId }),
       ...(status ? { status: String(status) as any } : {}),
       ...(page ? { page: Number(page) } : {}),

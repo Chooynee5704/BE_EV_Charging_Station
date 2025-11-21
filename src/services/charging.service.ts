@@ -136,24 +136,28 @@ export async function getChargingProgress(sessionId: string) {
 }
 
 export interface ListSessionsOptions {
-  userId: string;
+  userId?: string;
+  forAll?: boolean;
   status?: "active" | "completed" | "cancelled";
   page?: number;
   limit?: number;
 }
 
 export async function listUserChargingSessions(opts: ListSessionsOptions) {
-  const { userId, status, page = 1, limit = 20 } = opts;
+  const { userId, forAll = false, status, page = 1, limit = 20 } = opts;
 
-  if (!Types.ObjectId.isValid(userId)) {
+  if (!forAll && (!userId || !Types.ObjectId.isValid(userId))) {
     throw Object.assign(new Error("userId invalid"), { status: 400 });
   }
 
-  // Find all vehicles owned by the user
-  const userVehicles = await Vehicle.find({ owner: userId }, { _id: 1 }).lean();
-  const vehicleIds = userVehicles.map((v) => v._id);
+  let vehicleIds: Types.ObjectId[] = [];
+  if (!forAll && userId) {
+    // Find all vehicles owned by the user
+    const userVehicles = await Vehicle.find({ owner: userId }, { _id: 1 }).lean();
+    vehicleIds = userVehicles.map((v) => v._id);
+  }
 
-  if (vehicleIds.length === 0) {
+  if (!forAll && vehicleIds.length === 0) {
     return {
       items: [],
       pagination: {
@@ -166,9 +170,10 @@ export async function listUserChargingSessions(opts: ListSessionsOptions) {
   }
 
   // Build filter
-  const filter: any = {
-    vehicle: { $in: vehicleIds },
-  };
+  const filter: any = {};
+  if (!forAll) {
+    filter.vehicle = { $in: vehicleIds };
+  }
 
   if (status) {
     filter.status = status;
@@ -184,7 +189,10 @@ export async function listUserChargingSessions(opts: ListSessionsOptions) {
       .skip(skip)
       .limit(safeLimit)
       .populate("vehicle")
-      .populate("slot")
+      .populate({
+        path: "slot",
+        populate: { path: "port", populate: { path: "station" } },
+      })
       .lean(),
     ChargingSession.countDocuments(filter),
   ]);

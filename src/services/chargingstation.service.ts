@@ -267,7 +267,8 @@ export async function getStationById(id: string, includePorts = true) {
   ensureValidObjectId(id, "id");
 
   let query = ChargingStation.findById(id);
-  if (includePorts !== false) query = query.populate("ports");
+  if (includePorts !== false)
+    query = query.populate({ path: "ports", populate: { path: "slots" } });
 
   const doc = await query.exec();
   if (!doc) {
@@ -304,7 +305,8 @@ export async function listStations(opts: ListStationsOptions = {}) {
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(safeLimit);
-  if (includePorts !== false) q = q.populate("ports");
+  if (includePorts !== false)
+    q = q.populate({ path: "ports", populate: { path: "slots" } });
 
   const [docs, total] = await Promise.all([
     q.exec(),

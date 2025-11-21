@@ -19,6 +19,7 @@ export interface CreateReservationInput {
 export interface ListReservationsOptions {
   vehicleId?: string;
   ownerUserId?: string; // list all reservations for vehicles owned by this user
+  forAll?: boolean; // admin/staff: list all reservations
   status?: "pending" | "confirmed" | "cancelled" | "completed";
   page?: number;
   limit?: number;
@@ -178,7 +179,14 @@ export async function createReservation(input: CreateReservationInput) {
 }
 
 export async function listReservations(opts: ListReservationsOptions) {
-  const { vehicleId, ownerUserId, status, page = 1, limit = 20 } = opts;
+  const {
+    vehicleId,
+    ownerUserId,
+    forAll = false,
+    status,
+    page = 1,
+    limit = 20,
+  } = opts;
 
   const filter: any = {};
   if (status) filter.status = status;
@@ -190,6 +198,8 @@ export async function listReservations(opts: ListReservationsOptions) {
       throw e;
     }
     filter.vehicle = new Types.ObjectId(vehicleId);
+  } else if (forAll) {
+    // No restriction - staff/admin can view all reservations
   } else if (ownerUserId) {
     if (!Types.ObjectId.isValid(ownerUserId)) {
       const e: any = new Error("ownerUserId is not a valid ObjectId");
@@ -203,7 +213,7 @@ export async function listReservations(opts: ListReservationsOptions) {
     const ids = ownedVehicles.map((v) => v._id);
     filter.vehicle = { $in: ids.length ? ids : [new Types.ObjectId()] };
   } else {
-    const e: any = new Error("Either vehicleId or ownerUserId is required");
+    const e: any = new Error("Either vehicleId, ownerUserId or forAll is required");
     e.status = 400;
     throw e;
   }
@@ -217,7 +227,10 @@ export async function listReservations(opts: ListReservationsOptions) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(safeLimit)
-      .populate("items.slot")
+      .populate({
+        path: "items.slot",
+        populate: { path: "port", populate: { path: "station" } },
+      })
       .populate("vehicle")
       .lean(),
     Reservation.countDocuments(filter),
@@ -241,7 +254,10 @@ export async function getReservationById(id: string) {
     throw e;
   }
   const doc = await Reservation.findById(id)
-    .populate("items.slot")
+    .populate({
+      path: "items.slot",
+      populate: { path: "port", populate: { path: "station" } },
+    })
     .populate("vehicle");
   if (!doc) {
     const e: any = new Error("Reservation not found");

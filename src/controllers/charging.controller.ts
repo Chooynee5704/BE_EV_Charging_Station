@@ -100,8 +100,10 @@ export async function listMyChargingSessionsController(req: AuthenticatedRequest
       limit?: string;
     };
 
+    const isAdminOrStaff = req.user.role === "admin" || req.user.role === "staff";
+
     const result = await listUserChargingSessions({
-      userId: req.user.userId,
+      ...(isAdminOrStaff ? { forAll: true } : { userId: req.user.userId }),
       ...(status ? { status } : {}),
       ...(page ? { page: Number(page) } : {}),
       ...(limit ? { limit: Number(limit) } : {}),
