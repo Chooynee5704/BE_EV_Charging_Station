@@ -264,8 +264,6 @@ router.delete(
   deleteChargingStationController
 );
 
-/* ======================== Port routes (RELATIVE) ======================== */
-
 /**
  * @swagger
  * /stations/ports:

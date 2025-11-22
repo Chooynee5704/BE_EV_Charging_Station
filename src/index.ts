@@ -18,6 +18,7 @@ import transactionRoutes from "./routes/transaction.routes";
 import chargingRoutes from "./routes/charging.routes";
 import subscriptionRoutes from "./routes/subscription.routes";
 import subscriptionPlanRoutes from "./routes/subscriptionPlan.routes";
+import reportRoutes from "./routes/report.routes";
 
 dotenv.config();
 
@@ -122,6 +123,7 @@ app.use("/transactions", transactionRoutes);
 app.use("/charging", chargingRoutes);
 app.use("/subscriptions", subscriptionRoutes);
 app.use("/subscription-plans", subscriptionPlanRoutes);
+app.use("/reports", reportRoutes);
 
 // ---------------- SEED DEFAULT USERS ----------------
 async function seedDefaultUsers() {
@@ -280,6 +282,10 @@ app.get("/", (_req: Request, res: Response) => {
         cancel: "POST /subscriptions/:id/cancel (Protected - hủy subscription)",
         activate:
           "POST /subscriptions/:id/activate (admin - kích hoạt subscription)",
+      },
+      reports: {
+        create: "POST /reports (staff, admin)",
+        list: "GET /reports (staff, admin)",
       },
     },
   });

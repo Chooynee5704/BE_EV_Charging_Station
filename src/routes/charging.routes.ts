@@ -89,7 +89,7 @@ router.get(
 
 /**
  * @swagger
- * /charging/sessions/{vehicleId}:
+ * /charging/sessions/vehicle/{vehicleId}:
  *   get:
  *     tags: [Charging]
  *     summary: Get all charging sessions for a specific vehicle
@@ -164,7 +164,7 @@ router.get(
  *       404: { description: Vehicle not found }
  */
 router.get(
-  "/sessions/:vehicleId",
+  "/sessions/vehicle/:vehicleId",
   authenticateToken,
   authorizeRoles("admin", "staff", "user"),
   listChargingSessionsByVehicleController
